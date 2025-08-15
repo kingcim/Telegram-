@@ -1,0 +1,28 @@
+{
+  "name": "free-base-telegram",
+  "description": "Free Base Telegram by @Primrose_Lotus",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0",
+    "axios": "^1.4.0",
+    "cheerio": "^1.0.0-rc.12",
+    "dotenv": "^16.0.3",
+    "ffmpeg-static": "^4.3.0",
+    "fluent-ffmpeg": "^2.1.2",
+    "fs-extra": "^11.1.1",
+    "moment-timezone": "^0.5.43",
+    "pino": "^9.6.0",
+    "ytdl-core": "^4.11.5",
+    "yt-search": "^2.7.6",
+    "youtube-yts": "^2.0.0",
+    "node-fetch": "^2.6.11"
+  }
+}
