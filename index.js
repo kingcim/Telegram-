@@ -377,7 +377,7 @@ bot.onText(/^\/chatbotoff$/, async (msg) => {
     const userId = msg.from.id;
 
     // OWNER VERIFICATION
-    const OWNER_ID = config.ownerId || 5028094995;
+    const OWNER_ID = 5028094995;
     if (userId !== OWNER_ID) {
         return bot.sendMessage(
             chatId,
