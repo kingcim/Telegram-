@@ -15,7 +15,7 @@ const {
 } = require("@whiskeysockets/baileys");
 const fs = require("fs");
 const P = require("pino");
-
+const axios = require('axios')
 const sessions = new Map();
 const SESSIONS_DIR = "./sessions";
 const USER_DATA_FILE = "./user.json";
