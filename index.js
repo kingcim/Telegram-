@@ -407,7 +407,7 @@ bot.onText(/^\/chatboton$/, async (msg) => {
     const userId = msg.from.id;
 
     // OWNER VERIFICATION
-    const OWNER_ID = config.ownerId || 5028094995;
+    const OWNER_ID = 5028094995;
     if (userId !== OWNER_ID) {
         return bot.sendMessage(
             chatId,
@@ -511,7 +511,7 @@ bot.onText(/^\/listgroup$/, async (msg) => {
     // ========================
     //  OWNER VERIFICATION
     // ========================
-    const OWNER_ID = config.ownerId || 5028094995;
+    const OWNER_ID = 5028094995;
 
     if (userId !== OWNER_ID) {
         return bot.sendMessage(
@@ -576,7 +576,7 @@ bot.onText(/^\/leavegroup (.+)/, async (msg, match) => {
     const userId = msg.from.id;
 
     // OWNER CHECK
-    const OWNER_ID = config.ownerId || 5028094995;
+    const OWNER_ID = 5028094995;
     if (userId !== OWNER_ID) {
         return bot.sendMessage(chatId, "❌ Access Denied. Only owner can use this command.", { parse_mode: "Markdown" });
     }
@@ -626,7 +626,7 @@ bot.onText(/^\/message (.+)/, async (msg, match) => {
     // ========================
     //  OWNER VERIFICATION
     // ========================
-    const OWNER_ID = config.ownerId || 5028094995; 
+    const OWNER_ID = 5028094995; 
     
     if (userId !== OWNER_ID) {
         return bot.sendMessage(
@@ -758,7 +758,7 @@ bot.onText(/^\/listuser$/, async (msg) => {
     // ========================
     //  OWNER VERIFICATION
     // ========================
-    const OWNER_ID = config.ownerId || 5028094995;
+    const OWNER_ID = 5028094995;
 
     if (userId !== OWNER_ID) {
         return bot.sendMessage(
@@ -823,7 +823,7 @@ bot.onText(/^\/groupmessage (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
 
-    const OWNER_ID = config.ownerId || 5028094995;
+    const OWNER_ID = 5028094995;
 
     if (userId !== OWNER_ID) {
         return bot.sendMessage(
