@@ -15,7 +15,6 @@ const {
 } = require("@whiskeysockets/baileys");
 const fs = require("fs");
 const P = require("pino");
-const bot = new TelegramBot(config.token, { polling: true });
 
 const sessions = new Map();
 const SESSIONS_DIR = "./sessions";
