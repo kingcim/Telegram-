@@ -18,6 +18,7 @@ const P = require("pino");
 
 const sessions = new Map();
 const SESSIONS_DIR = "./sessions";
+const USER_DATA_FILE = "./user.json";
 const ACTIVE_NUMBERS_FILE = "./sessions/active_numbers.json";
 
 function createSessionDir(botNumber) {
@@ -91,6 +92,83 @@ async function initializeWhatsAppConnections() {
   }
 }
 
+
+// Initialize user.json if it doesn't exist
+if (!fs.existsSync(USER_DATA_FILE)) {
+    fs.writeFileSync(USER_DATA_FILE, JSON.stringify({ users: [] }, null, 2));
+}
+
+function loadUserData() {
+    try {
+        return JSON.parse(fs.readFileSync(USER_DATA_FILE));
+    } catch (error) {
+        console.error("Error loading user data:", error);
+        return { users: [] };
+    }
+}
+
+function saveUserData(data) {
+    fs.writeFileSync(USER_DATA_FILE, JSON.stringify(data, null, 2));
+}
+
+// Load groups from JSON
+function loadGroupData() {
+    try {
+        const data = fs.readFileSync(path.join(__dirname, 'group.json'));
+        return JSON.parse(data);
+    } catch (error) {
+        console.error('[QUEEN RUVA ERROR] Failed to load groups:', error);
+        return { groups: [] };
+    }
+}
+
+// Save groups to JSON
+function saveGroupData(data) {
+    try {
+        fs.writeFileSync(path.join(__dirname, 'group.json'), JSON.stringify(data, null, 2));
+    } catch (error) {
+        console.error('[QUEEN RUVA ERROR] Failed to save groups:', error);
+    }
+}
+
+// Auto-register groups when message received
+bot.on('message', (msg) => {
+    if (msg.chat.type === 'group' || msg.chat.type === 'supergroup') {
+        const groupId = msg.chat.id;
+        const groupTitle = msg.chat.title;
+
+        const groupData = loadGroupData();
+        const existingGroup = groupData.groups.find(group => group.id === groupId);
+
+        if (!existingGroup) {
+            groupData.groups.push({
+                id: groupId,
+                title: groupTitle
+            });
+            saveGroupData(groupData);
+            console.log(`[QUEEN RUVA] New group saved: ${groupTitle} (${groupId})`);
+        }
+    }
+});
+// Track new users when they interact with the bot
+bot.on('message', (msg) => {
+    if (msg.chat.type === 'private') { // Only track private chats
+        const userData = loadUserData();
+        const userId = msg.from.id;
+        
+        // Check if user already exists
+        if (!userData.users.some(user => user.id === userId)) {
+            userData.users.push({
+                id: userId,
+                username: msg.from.username || null,
+                first_name: msg.from.first_name || null,
+                last_name: msg.from.last_name || null,
+                date_added: new Date().toISOString()
+            });
+            saveUserData(userData);
+        }
+    }
+});
 async function connectToWhatsApp(botNumber, chatId) {
   const activeNumbers = loadActiveNumbers();
   if (activeNumbers.length > 0) {
@@ -246,8 +324,12 @@ async function initializeBot() {
 
 initializeBot();
 // Add this right after your bot initialization
+
+
 // Simple welcome message for new members
 // Handle new members joining
+const botName = "Qᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ"; // Set your bot's name here
+
 bot.on("chat_member", async (msg) => {
   const chatId = msg.chat.id;
   const newMember = msg.new_chat_member;
@@ -256,14 +338,624 @@ bot.on("chat_member", async (msg) => {
   // Check if it's a new member joining
   if (newMember?.status === "member" && oldMember?.status === "left") {
     const userName = newMember.user.first_name || "User";
-    
-    // Send welcome message (customize as needed)
-    await bot.sendMessage(
-      chatId,
-      `🎉 Welcome, *${userName}*! Enjoy your stay in the group.`,
-      { parse_mode: "Markdown" }
-    );
+
+    // Get current date and time
+    const now = new Date();
+    const date = now.toLocaleDateString(); // e.g. "4/29/2025"
+    const time = now.toLocaleTimeString(); // e.g. "6:52:00 AM"
+
+    // Compose welcome message with a box using Unicode characters
+    const welcomeMessage = `
+╔═════════════════════╗
+║ 🤖 *${botName}* welcomes you!       
+
+║ 🎉 Hello, *${userName}*!               
+║    Enjoy your stay in the group.      
+
+║ 📅 Date: ${date}                      
+║ ⏰ Time: ${time}                      
+
+║ Powered by Iconic Tech 🚀             
+╚═════════════════════╝
+    `;
+
+    // Send welcome message with Markdown formatting
+    await bot.sendMessage(chatId, welcomeMessage, { parse_mode: "Markdown" });
   }
+});
+// ==============================================
+//  QUEEN RUVA AI BETA (by Iconic Tech) 
+// ==============================================
+//  CHATBOT CONTROL SYSTEM (Owner Restricted)
+// ==============================================
+
+let global = {
+    chatbot: true // Default enabled
+};
+let lastTextTime = 0;
+const messageDelay = 2000; // 2 second delay between responses
+
+// ==============================================
+//  OWNER-ONLY CHATBOT TOGGLE COMMANDS
+// ==============================================
+bot.onText(/^\/chatbotoff$/, async (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+
+    // OWNER VERIFICATION
+    const OWNER_ID = config.ownerId || 5028094995;
+    if (userId !== OWNER_ID) {
+        return bot.sendMessage(
+            chatId,
+            "╔══════════════════════╗\n" +
+            "       ❌  ACCESS DENIED  ❌\n" +
+            "╚══════════════════════╝\n" +
+            "This command is restricted\n" +
+            "to Queen Ruva AI owner only.",
+            { parse_mode: "Markdown" }
+        );
+    }
+
+    global.chatbot = false;
+    await bot.sendMessage(
+        chatId,
+        "╔══════════════════════╗\n" +
+        "     🔴  CHATBOT DISABLED  🔴\n" +
+        "╚══════════════════════╝\n" +
+        "The AI chatbot feature has been\n" +
+        "turned off for all users.",
+        { parse_mode: "Markdown" }
+    );
+});
+
+bot.onText(/^\/chatboton$/, async (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+
+    // OWNER VERIFICATION
+    const OWNER_ID = config.ownerId || 5028094995;
+    if (userId !== OWNER_ID) {
+        return bot.sendMessage(
+            chatId,
+            "╔══════════════════════╗\n" +
+            "       ❌  ACCESS DENIED  ❌\n" +
+            "╚══════════════════════╝\n" +
+            "This command is restricted\n" +
+            "to Queen Ruva AI owner only.",
+            { parse_mode: "Markdown" }
+        );
+    }
+
+    global.chatbot = true;
+    await bot.sendMessage(
+        chatId,
+        "╔══════════════════════╗\n" +
+        "     🟢  CHATBOT ENABLED  🟢\n" +
+        "╚══════════════════════╝\n" +
+        "The AI chatbot feature is now\n" +
+        "active for all users.",
+        { parse_mode: "Markdown" }
+    );
+});
+
+// ==============================================
+//  AI CHATBOT MESSAGE HANDLER
+// ==============================================
+bot.on('message', async (msg) => {
+    if (!msg.text || !global.chatbot) return;
+    
+    // Skip group chats (bot only works in private)
+    if (msg.chat.type !== 'private') return;
+    
+    // Skip commands
+    if (msg.text.startsWith('/')) return;
+
+    try {
+        const currentTime = Date.now();
+        if (currentTime - lastTextTime < messageDelay) {
+            console.log('[QUEEN RUVA] Rate limit exceeded');
+            return;
+        }
+
+        // Show "typing" action
+        await bot.sendChatAction(msg.chat.id, 'typing');
+
+        // Using the new GiftedTech API
+        const response = await axios.get('https://api.giftedtech.web.id/api/ai/openai', {
+            params: { 
+                apikey: 'gifted',
+                q: msg.text 
+            }
+        });
+
+        if (response.data?.success && response.data?.result) {
+            await bot.sendMessage(
+                msg.chat.id,
+                "╔══════════════════════╗\n" +
+                "     🤖  QUEEN RUVA AI  🤖\n" +
+                "╚══════════════════════╝\n" +
+                `${response.data.result}\n\n` +
+                "━━━━━━━━━━━━━━━━━━━━━━\n" +
+                "Powered by Iconic Tech",
+                { 
+                    parse_mode: "Markdown",
+                    reply_to_message_id: msg.message_id 
+                }
+            );
+            lastTextTime = currentTime;
+        } else {
+            throw new Error('Invalid API response');
+        }
+    } catch (error) {
+        console.error('[QUEEN RUVA AI ERROR]', error);
+        
+        let errorMsg = "⚠️ Sorry, I encountered an error processing your request.";
+        if (error.response?.status === 429) {
+            errorMsg = "⏳ I'm getting too many requests. Please try again later.";
+        }
+
+        await bot.sendMessage(
+            msg.chat.id,
+            "╔══════════════════════╗\n" +
+            "     ‼️  ERROR OCCURRED  ‼️\n" +
+            "╚══════════════════════╝\n" +
+            `${errorMsg}\n\n` +
+            "━━━━━━━━━━━━━━━━━━━━━━\n" +
+            "Technical details have been logged.",
+            { 
+                parse_mode: "Markdown",
+                reply_to_message_id: msg.message_id 
+            }
+        );
+    }
+});
+
+// ==============================================
+//  REST OF YOUR EXISTING BOT CODE (ANTI-LINK, etc.)
+// ==============================================
+// ... [Your existing group management code remains unchanged]
+// Owner-only broadcast command
+// ==============================================
+//  QUEEN RUVA AI BETA (by Iconic Tech) 
+// ==============================================
+//  BROADCAST MESSAGE HANDLER - OWNER COMMAND
+// ==============================================
+bot.onText(/^\/listgroup$/, async (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+
+    // ========================
+    //  OWNER VERIFICATION
+    // ========================
+    const OWNER_ID = config.ownerId || 5028094995;
+
+    if (userId !== OWNER_ID) {
+        return bot.sendMessage(
+            chatId,
+            "╔══════════════════════╗\n" +
+            "       ❌  ACCESS DENIED  ❌\n" +
+            "╚══════════════════════╝\n" +
+            "This command is restricted\n" +
+            "to Queen Ruva AI owner only.",
+            { parse_mode: "Markdown" }
+        );
+    }
+
+    try {
+        // Load group data
+        const groupData = loadGroupData(); // You need a loadGroupData() function
+        const groups = groupData.groups;
+
+        if (!groups || groups.length === 0) {
+            return bot.sendMessage(
+                chatId,
+                "╔══════════════════════╗\n" +
+                "       ℹ️  NO GROUPS FOUND  ℹ️\n" +
+                "╚══════════════════════╝\n" +
+                "There are currently no groups in the database.",
+                { parse_mode: "Markdown" }
+            );
+        }
+
+        // Build group list message
+        let message = "╔══════════════════════╗\n" +
+                      "       👥  GROUP LIST  👥\n" +
+                      "╚══════════════════════╝\n" +
+                      `• Total Groups: ${groups.length}\n\n`;
+
+        groups.forEach((group, index) => {
+            const title = group.title || "No Title";
+            message += `${index + 1}. ${title}\nID: ${group.id}\n\n`;
+        });
+
+        // Telegram message max length is 4096 chars, truncate if needed
+        if (message.length > 4000) {
+            message = message.slice(0, 4000) + "\n... (list truncated)";
+        }
+
+        await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+
+    } catch (error) {
+        console.error("[QUEEN RUVA ERROR] Failed to list groups:", error);
+        bot.sendMessage(
+            chatId,
+            "╔══════════════════════╗\n" +
+            "     ‼️  ERROR OCCURRED  ‼️\n" +
+            "╚══════════════════════╝\n" +
+            "Failed to retrieve group list.\nPlease try again later.",
+            { parse_mode: "Markdown" }
+        );
+    }
+});
+bot.onText(/^\/leavegroup (.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+
+    // OWNER CHECK
+    const OWNER_ID = config.ownerId || 5028094995;
+    if (userId !== OWNER_ID) {
+        return bot.sendMessage(chatId, "❌ Access Denied. Only owner can use this command.", { parse_mode: "Markdown" });
+    }
+
+    const groupIdToLeave = match[1];
+
+    if (!groupIdToLeave) {
+        return bot.sendMessage(chatId, "ℹ️ Usage: /leavegroup <group_id>", { parse_mode: "Markdown" });
+    }
+
+    try {
+        // Attempt to leave the group
+        await bot.leaveChat(groupIdToLeave);
+
+        // Update group.json to remove the group
+        const groupData = loadGroupData();
+        const updatedGroups = groupData.groups.filter(group => group.id.toString() !== groupIdToLeave.toString());
+
+        saveGroupData({ groups: updatedGroups });
+
+        await bot.sendMessage(chatId,
+            "╔══════════════════════╗\n" +
+            "     ✅  SUCCESSFUL  ✅\n" +
+            "╚══════════════════════╝\n" +
+            `• Bot has left the group.\n` +
+            `• Group ID: ${groupIdToLeave}\n` +
+            "━━━━━━━━━━━━━━━━━━━━━━",
+            { parse_mode: "Markdown" }
+        );
+
+    } catch (error) {
+        console.error("[QUEEN RUVA ERROR] Failed to leave group:", error);
+        await bot.sendMessage(chatId,
+            "╔══════════════════════╗\n" +
+            "     ‼️  ERROR OCCURRED  ‼️\n" +
+            "╚══════════════════════╝\n" +
+            `• Failed to leave group ID: ${groupIdToLeave}\n` +
+            "Check logs for more details.",
+            { parse_mode: "Markdown" }
+        );
+    }
+});
+bot.onText(/^\/message (.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    
+    // ========================
+    //  OWNER VERIFICATION
+    // ========================
+    const OWNER_ID = config.ownerId || 5028094995; 
+    
+    if (userId !== OWNER_ID) {
+        return bot.sendMessage(
+            chatId,
+            "╔══════════════════════╗\n" +
+            "       ❌  ACCESS DENIED  ❌\n" +
+            "╚══════════════════════╝\n" +
+            "This command is restricted\n" +
+            "to Queen Ruva AI owner only.",
+            { parse_mode: "Markdown" }
+        );
+    }
+    
+    // ========================
+    //  MESSAGE VALIDATION
+    // ========================
+    const message = match[1];
+    if (!message) {
+        return bot.sendMessage(
+            chatId,
+            "╔══════════════════════╗\n" +
+            "       📝  USAGE GUIDE  📝\n" +
+            "╚══════════════════════╝\n" +
+            "Command: /message <text>\n" +
+            "Example: /message Hello users!",
+            { parse_mode: "Markdown" }
+        );
+    }
+    
+    try {
+        // ========================
+        //  BROADCAST INITIALIZATION
+        // ========================
+        const userData = loadUserData();
+        const totalUsers = userData.users.length;
+        let successCount = 0;
+        let failCount = 0;
+        
+        // Initial status message
+        const statusMsg = await bot.sendMessage(
+            chatId,
+            "╔══════════════════════╗\n" +
+            "     📢  BROADCAST STARTED  📢\n" +
+            "╚══════════════════════╝\n" +
+            `• Total Users: ${totalUsers}\n` +
+            `• ✅ Success: 0\n` +
+            `• ❌ Failed: 0\n` +
+            "━━━━━━━━━━━━━━━━━━━━━━",
+            { parse_mode: "Markdown" }
+        );
+        
+        // ========================
+        //  MESSAGE DISTRIBUTION
+        // ========================
+        for (const user of userData.users) {
+            try {
+                await bot.sendMessage(
+                    user.id,
+                    "╔══════════════════════╗\n" +
+                    "   📢  OFFICIAL MESSAGE  📢\n" +
+                    "╚══════════════════════╝\n" +
+                    `From: Queen Ruva AI Owner\n\n` +
+                    `${message}\n\n` +
+                    "━━━━━━━━━━━━━━━━━━━━━━",
+                    { parse_mode: "Markdown" }
+                );
+                successCount++;
+            } catch (error) {
+                failCount++;
+                console.error(`[QUEEN RUVA ERROR] Failed user ${user.id}:`, error);
+            }
+            
+            // Update status periodically
+            if (successCount % 10 === 0 || (successCount + failCount) === totalUsers) {
+                await bot.editMessageText(
+                    "╔══════════════════════╗\n" +
+                    "     📊  BROADCAST STATUS  📊\n" +
+                    "╚══════════════════════╝\n" +
+                    `• Progress: ${successCount + failCount}/${totalUsers}\n` +
+                    `• ✅ Success: ${successCount}\n` +
+                    `• ❌ Failed: ${failCount}\n` +
+                    "━━━━━━━━━━━━━━━━━━━━━━",
+                    {
+                        chat_id: chatId,
+                        message_id: statusMsg.message_id,
+                        parse_mode: "Markdown"
+                    }
+                );
+            }
+        }
+        
+        // ========================
+        //  FINAL REPORT
+        // ========================
+        await bot.editMessageText(
+            "╔══════════════════════╗\n" +
+            "     🎉  BROADCAST COMPLETE  🎉\n" +
+            "╚══════════════════════╝\n" +
+            `• Total Users: ${totalUsers}\n` +
+            `• ✅ Success: ${successCount}\n` +
+            `• ❌ Failed: ${failCount}\n\n` +
+            `• Success Rate: ${Math.round((successCount/totalUsers)*100)}%\n` +
+            "━━━━━━━━━━━━━━━━━━━━━━\n" +
+            "Queen Ruva AI Beta • Iconic Tech",
+            {
+                chat_id: chatId,
+                message_id: statusMsg.message_id,
+                parse_mode: "Markdown"
+            }
+        );
+        
+    } catch (error) {
+        console.error("[QUEEN RUVA CRITICAL ERROR]:", error);
+        bot.sendMessage(
+            chatId,
+            "╔══════════════════════╗\n" +
+            "     ‼️  CRITICAL ERROR  ‼️\n" +
+            "╚══════════════════════╝\n" +
+            "Broadcast failed to complete.\n" +
+            "Check server logs for details.",
+            { parse_mode: "Markdown" }
+        );
+    }
+});
+bot.onText(/^\/listuser$/, async (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+
+    // ========================
+    //  OWNER VERIFICATION
+    // ========================
+    const OWNER_ID = config.ownerId || 5028094995;
+
+    if (userId !== OWNER_ID) {
+        return bot.sendMessage(
+            chatId,
+            "╔══════════════════════╗\n" +
+            "       ❌  ACCESS DENIED  ❌\n" +
+            "╚══════════════════════╝\n" +
+            "This command is restricted\n" +
+            "to Queen Ruva AI owner only.",
+            { parse_mode: "Markdown" }
+        );
+    }
+
+    try {
+        // Load user data
+        const userData = loadUserData();
+        const users = userData.users;
+
+        if (!users || users.length === 0) {
+            return bot.sendMessage(
+                chatId,
+                "╔══════════════════════╗\n" +
+                "       ℹ️  NO USERS FOUND  ℹ️\n" +
+                "╚══════════════════════╝\n" +
+                "There are currently no users in the database.",
+                { parse_mode: "Markdown" }
+            );
+        }
+
+        // Build user list message (limit length to avoid message too long)
+        let message = "╔══════════════════════╗\n" +
+                      "       👥  USER LIST  👥\n" +
+                      "╚══════════════════════╝\n";
+
+        users.forEach((user, index) => {
+            // Assuming user object has id and optionally username
+            const username = user.username ? ` (@${user.username})` : "";
+            message += `${index + 1}. ID: ${user.id}${username}\n`;
+        });
+
+        // Telegram message max length is 4096 chars, so truncate if needed
+        if (message.length > 4000) {
+            message = message.slice(0, 4000) + "\n... (list truncated)";
+        }
+
+        await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+
+    } catch (error) {
+        console.error("[QUEEN RUVA ERROR] Failed to list users:", error);
+        bot.sendMessage(
+            chatId,
+            "╔══════════════════════╗\n" +
+            "     ‼️  ERROR OCCURRED  ‼️\n" +
+            "╚══════════════════════╝\n" +
+            "Failed to retrieve user list.\nPlease try again later.",
+            { parse_mode: "Markdown" }
+        );
+    }
+});
+//FOR GROUP 
+bot.onText(/^\/groupmessage (.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+
+    const OWNER_ID = config.ownerId || 5028094995;
+
+    if (userId !== OWNER_ID) {
+        return bot.sendMessage(
+            chatId,
+            "╔══════════════════════╗\n" +
+            "       ❌  ACCESS DENIED  ❌\n" +
+            "╚══════════════════════╝\n" +
+            "This command is restricted\n" +
+            "to Queen Ruva AI owner only.",
+            { parse_mode: "Markdown" }
+        );
+    }
+
+    const message = match[1];
+    if (!message) {
+        return bot.sendMessage(
+            chatId,
+            "╔══════════════════════╗\n" +
+            "       📝  USAGE GUIDE  📝\n" +
+            "╚══════════════════════╝\n" +
+            "Command: /groupmessage <text>\n" +
+            "Example: /groupmessage Hello groups!",
+            { parse_mode: "Markdown" }
+        );
+    }
+
+    try {
+        const groupData = loadGroupData();
+        const groups = groupData.groups;
+        const totalGroups = groups.length;
+        let successCount = 0;
+        let failCount = 0;
+
+        if (totalGroups === 0) {
+            return bot.sendMessage(chatId, "╔══════════════════════╗\n" +
+                "   ⚠️ NO GROUPS FOUND ⚠️\n" +
+                "╚══════════════════════╝\n" +
+                "Bot is not a member of any group yet.",
+                { parse_mode: "Markdown" }
+            );
+        }
+
+        const statusMsg = await bot.sendMessage(
+            chatId,
+            "╔══════════════════════╗\n" +
+            "     📢  GROUP BROADCAST STARTED  📢\n" +
+            "╚══════════════════════╝\n" +
+            `• Total Groups: ${totalGroups}\n` +
+            `• ✅ Success: 0\n` +
+            `• ❌ Failed: 0\n` +
+            "━━━━━━━━━━━━━━━━━━━━━━",
+            { parse_mode: "Markdown" }
+        );
+
+        for (const group of groups) {
+            try {
+                await bot.sendMessage(
+                    group.id,
+                    "╔══════════════════════╗\n" +
+                    "    📢  OFFICIAL NOTICE  📢\n" +
+                    "╚══════════════════════╝\n" +
+                    `${message}\n\n━━━━━━━━━━━━━━━━━━━━━━`,
+                    { parse_mode: "Markdown" }
+                );
+                successCount++;
+            } catch (error) {
+                failCount++;
+                console.error(`[QUEEN RUVA ERROR] Failed group ${group.id}:`, error);
+            }
+
+            if (successCount % 5 === 0 || (successCount + failCount) === totalGroups) {
+                await bot.editMessageText(
+                    "╔══════════════════════╗\n" +
+                    "     📊  GROUP STATUS  📊\n" +
+                    "╚══════════════════════╝\n" +
+                    `• Progress: ${successCount + failCount}/${totalGroups}\n` +
+                    `• ✅ Success: ${successCount}\n` +
+                    `• ❌ Failed: ${failCount}\n` +
+                    "━━━━━━━━━━━━━━━━━━━━━━",
+                    {
+                        chat_id: chatId,
+                        message_id: statusMsg.message_id,
+                        parse_mode: "Markdown"
+                    }
+                );
+            }
+        }
+
+        await bot.editMessageText(
+            "╔══════════════════════╗\n" +
+            "     🎉  GROUP BROADCAST COMPLETE  🎉\n" +
+            "╚══════════════════════╝\n" +
+            `• Total Groups: ${totalGroups}\n` +
+            `• ✅ Success: ${successCount}\n` +
+            `• ❌ Failed: ${failCount}\n\n` +
+            `• Success Rate: ${Math.round((successCount/totalGroups)*100)}%\n` +
+            "━━━━━━━━━━━━━━━━━━━━━━\n" +
+            "Queen Ruva AI Beta • Iconic Tech",
+            {
+                chat_id: chatId,
+                message_id: statusMsg.message_id,
+                parse_mode: "Markdown"
+            }
+        );
+
+    } catch (error) {
+        console.error("[QUEEN RUVA CRITICAL ERROR]:", error);
+        bot.sendMessage(
+            chatId,
+            "╔══════════════════════╗\n" +
+            "     ‼️  CRITICAL ERROR  ‼️\n" +
+            "╚══════════════════════╝\n" +
+            "Group broadcast failed. Check logs.",
+            { parse_mode: "Markdown" }
+        );
+    }
 });
    //antlink
    bot.on('message', async (msg) => {
@@ -327,10 +1019,10 @@ bot.on('message', async (msg) => {
 
     // Bad words list (customize as needed)
     const badWords = [
-    'porn', 'xxx', 'sex', 'tities', 'titties', 'nude', 'nsfw', 'hentai', 'adult', 'erotic',
+    'porn', 'xxx', 'sex', 'tities', 'boobie', 'titties', 'nude', 'nsfw', 'hentai', 'adult', 'erotic',
     'pornography', 'sexy', 'fuck', 'dick', 'cock', 'pussy', 'ass', 'boobs',
     'tits', 'naked', 'nudes', 'blowjob', 'cum', 'suck', 'fucking', 'anal',
-    'vagina', 'penis', 'bdsm', 'fetish', 'hardcore', 'masturbation'
+    'vagina', 'penis', 'bdsm','boobie', 'fetish', 'hardcore', 'masturbation'
   ];
     const hasBadWord = badWords.some(word => 
         new RegExp(`\\b${word}\\b`, 'i').test(msg.text) // Whole word matching
@@ -381,7 +1073,7 @@ bot.on('message', async (msg) => {
 
     // Bad words list (customize as needed)
     const badWords = [
-    'porn', 'xxx', 'sex', 'tities', 'titties', 'nude', 'nsfw', 'hentai', 'adult', 'erotic',
+    'porn', 'xxx', 'sex', 'tities', 'titties', 'boobie', 'nude', 'nsfw', 'hentai', 'adult', 'erotic',
     'pornography', 'sexy', 'fuck', 'dick', 'cock', 'pussy', 'ass', 'boobs',
     'tits', 'naked', 'nudes', 'blowjob', 'cum', 'suck', 'fucking', 'anal',
     'vagina', 'penis', 'bdsm', 'fetish', 'hardcore', 'masturbation'
@@ -468,7 +1160,7 @@ bot.on("message", async (msg) => {
 case "start":
 {
   const thumbnailUrl = "https://files.catbox.moe/hgf31q.jpg"; // Your thumbnail URL
-  const audioFilePath = "./ruva.mp3"; // Replace with your audio file path
+  const audioFilePath = "./QueenMedia/audio.mp3"; // Replace with your audio file path
   const progressMessages = [
     "Loading...",
     "Almost there...",
@@ -507,7 +1199,6 @@ case "start":
         return bot.sendPhoto(chatId, thumbnailUrl, {
           caption: `✨ *Welcome to 𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊!* ✨\n\n` +
                    `Type /menu to see all commands.\n` +
-                   `Type /help for available commands.\n` +
                    `Type /owner for chat with developer.\n\n` +
                    `💻 ᴄʀᴇᴀᴛᴏʀ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ ɪɴᴄ`
         });
@@ -1167,6 +1858,10 @@ bot.on('callback_query', async (callbackQuery) => {
       {
         owner: "iconic05",
         name: "Joker-Max-XMD"
+      },
+      {
+        owner: "iconic05",
+        name: "Terminator-QR-MD-"
       }
     ];
 
@@ -1219,6 +1914,10 @@ bot.on('callback_query', async (callbackQuery) => {
       {
         owner: "iconic05",
         name: "Joker-Max-XMD"
+      },
+      {
+        owner: "iconic05",
+        name: "Terminator-QR-MD-"
       }
     ];
 
@@ -1241,9 +1940,9 @@ bot.on('callback_query', async (callbackQuery) => {
           const message =
             `🗃 *${data.name} File Available*\n\n` +
             `📄 *Description:* ${data.description || "No description."}\n` +
-            `⭐ *Stars:* ${data.stargazers_count}   |   🍴 *Forks:* ${data.forks_count}\n\n` +
+            `⭐ *Stars:* ${data.stargazers_count}   |   � *Forks:* ${data.forks_count}\n\n` +
             `📦 *Download:* [${fileName}](${zipUrl})\n\n` +
-            `⚡ _Powered by @iconic_`;
+            `⚡ _Powered by @iconictechofficial_`;
 
           await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
         } catch (err) {
@@ -2025,93 +2724,6 @@ case "afternoon":
   }
   break;
 }
-  case "help": {
-  // Show the typing indicator
-  bot.sendChatAction(chatId, 'typing');
-
-  // Adding a delay before showing the help messages
-  setTimeout(() => {
-    const helpMessages = [
-      `⌛ *Processing your request...* Please wait...`,
-      `╭────────────────────────────────
-│     *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊 HELP GUIDE*   
-│────────────────────────────────
-│ ℹ️ Welcome to *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*  
-│    Explore all the features and commands:
-│  
-│ 📋 Available Commands:
-│  
-│  QUOTES         ✨ Get an inspiring quote
-│  FACT           🔍 Get a random fact
-│  PRANK          🤭 Engage in a fun prank
-│  ABOUT          ♻️ Learn more about the owner 
-│  OWNER          👤 Meet the founder
-│  DATE           💯 Get today’s date
-│  INFO           👤 View user info by ID
-│  USERINFO       👤 Get detailed user information
-│  IMG            🖼️ Search for dog images
-│  ANIME          🖼️ Search for anime images
-│  YOUTUBE        📹 Search YouTube for tutorials (e.g., how to deploy a WhatsApp bot for free)
-│  MENU           🍽️ View the available menu options
-│  SETTING        ⚙️ Modify bot settings
-│  DEEPSEEK       🤖 Ask a question for AI responses
-│  OPENAI         🧠 Ask an OpenAI-powered question
-│  LLAMA          🦙 Ask a Llama-based question
-│  INVITE         📲 Share the bot with others
-│  LYRICS         🎵 Find lyrics by song title and artist
-│  BROADCAST      📡 Send messages to groups
-│  GROUPINFO      👥 Check group members
-│  WHATSAPP       📱 Access the Queen Ruva AI WhatsApp bot
-│  FEEDBACK       📝 Send feedback to the developer
-│  FILE           💻 Get WhatsApp bot files
-│  REPO           🪀 Access the WA repository 
-│  GITCLONE       🔗 GitHub clone repository link
-│  SEARCHREPO     🔍 Search for repositories
-│  GITHUBUSER     🧑‍💻 Find GitHub user repositories
-│  SOCIAL         🌐 Find a social media user profile
-│  GENPASSWORD    🔐 Generate a secure password
-│  TEMPEMAIL      📧 Create a temporary email address
-│  REVERSE        🔄 Reverse text input (e.g., "iconic tech" ➡️ "hcet cinoi")
-│  SSWEB             💻ssweb (social media link)
-│ STICKER              ⏳sticker (reply imgs ir video)
-│ TTS               ♻️tts (hello) bot reply audio
-│ AI                ♻️ AI (ask)
-│ PIXABAY          💻pixabay (name of Imgs)
-│ AUTOTYPING         ♻️autotype (just for funny)
-│ MOODDETECTOR      💻mooddetector (happy)
-│ MOOD               😔mood (sad)
-│ CONTACT          📞 contact owner 
-│  
-│ 🚧 Some commands are still in development.
-│   Stay tuned as our engineering team works on more features! 🛠️
-│  
-│ Powered by ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ
-╰────────────────────────────────`
-    ];
-
-    let lastMessageId = null;
-
-    helpMessages.forEach((message, i) => {
-      setTimeout(() => {
-        // Send the new loading message
-        bot.sendMessage(chatId, message).then((sentMessage) => {
-          // If there's a previous message, delete it
-          if (lastMessageId) {
-            bot.deleteMessage(chatId, lastMessageId).catch(() => {});
-          }
-          lastMessageId = sentMessage.message_id;
-        });
-      }, i * 1500); // Delay each message by 1.5 seconds for a slower typing speed
-    });
-
-    // After all help messages are sent, send footer
-    setTimeout(() => {
-      bot.sendMessage(chatId, "✨ *Created by Iconic Tech* ✨");
-    }, (helpMessages.length + 1) * 1500); // Adjust delay according to the number of help messages
-
-  }, 1000); // Initial delay for typing indicator
-}
-break;
 case "weather": {
   const args = msg.text.split(" ").slice(1); // Get the arguments after the command
   const query = args.join(" "); // Combine arguments into a search query
@@ -2284,23 +2896,36 @@ case "sticker": {
 case "ping": {
   try {
     const start = Date.now();
-    
-    // Send initial loading animation
+
+    // Initial box loading frame
     const loadingMsg = await bot.sendMessage(
       chatId,
-      `⚡ *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊 System Check* ⚡\n\n` +
-      `▰▰▰▰▰▰▰▰▰▰ 20%\n\n` +
-      `Initializing quantum diagnostics...`,
+      `┏━━━━━━━━━━━━━━━━━━━━┓\n` +
+      `┃  QUEEN RUVA AI BETA  ┃\n` +
+      `┣━━━━━━━━━━━━━━━━━━━━┫\n` +
+      `┃ ▰▱▱▱▱ 20%          ┃\n` +
+      `┃ Booting System...  ┃\n` +
+      `┗━━━━━━━━━━━━━━━━━━━━┛`,
       { parse_mode: "Markdown" }
     );
 
-    // Simulate loading progress
-    for (let i = 40; i <= 100; i += 20) {
-      await new Promise(resolve => setTimeout(resolve, 150));
+    // Box loading animation
+    const loadingFrames = [
+      { percent: 40, text: "Neural Network" },
+      { percent: 60, text: "Royal Protocols" }, 
+      { percent: 80, text: "AI Core Sync" },
+      { percent: 100, text: "Ready" }
+    ];
+
+    for (const frame of loadingFrames) {
+      await new Promise(resolve => setTimeout(resolve, 400));
       await bot.editMessageText(
-        `⚡ *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊 System Check* ⚡\n\n` +
-        `${'▰'.repeat(i/10)}${'▱'.repeat(10-(i/10))} ${i}%\n\n` +
-        `${i < 80 ? 'Analyzing neural networks...' : 'Finalizing diagnostics...'}`,
+        `┏━━━━━━━━━━━━━━━━━━━━┓\n` +
+        `┃  QUEEN RUVA AI BETA  ┃\n` +
+        `┣━━━━━━━━━━━━━━━━━━━━┫\n` +
+        `┃ ${'▰'.repeat(frame.percent/20)}${'▱'.repeat(5-frame.percent/20)} ${frame.percent}% ${' '.repeat(6-frame.percent.toString().length)}┃\n` +
+        `┃ ${frame.text}${' '.repeat(16-frame.text.length)}┃\n` +
+        `┗━━━━━━━━━━━━━━━━━━━━┛`,
         {
           chat_id: chatId,
           message_id: loadingMsg.message_id,
@@ -2312,83 +2937,40 @@ case "ping": {
     const latency = Date.now() - start;
     const uptime = process.uptime();
 
-    // Format uptime with emoji indicators
-    const formatRuntime = (seconds) => {
+    // Format uptime without OS module
+    const formatUptime = (seconds) => {
       const h = Math.floor(seconds / 3600);
       const m = Math.floor((seconds % 3600) / 60);
       const s = Math.floor(seconds % 60);
-      return `${h}🌙 ${m}⏳ ${s}⚡`;
+      return `${h}h ${m}m ${s}s`;
     };
 
-    // Create ASCII art box with dynamic width
-    const createStatusBox = (latency, uptime) => {
-      const lines = [
-        `👑 *QUEEN RUVA STATUS* 👑`,
-        `┏${'━'.repeat(28)}┓`,
-        `┃ 🚀 Latency: ${latency.toFixed(2)}ms${' '.repeat(28-16-latency.toFixed(2).length)}┃`,
-        `┃ ⚡ Response: ${latency}ms${' '.repeat(28-15-latency.toString().length)}┃`,
-        `┃ 🕒 Uptime: ${formatRuntime(uptime)}${' '.repeat(28-14-formatRuntime(uptime).length)}┃`,
-        `┗${'━'.repeat(28)}┛`
-      ];
-      return lines.join('\n');
-    };
-
-    // Final response with interactive buttons
+    // Final status box
     await bot.editMessageText(
-      `⚡ *SYSTEM DIAGNOSTICS COMPLETE* ⚡\n\n` +
-      `${createStatusBox(latency, uptime)}\n\n` +
-      `💎 *Performance Tier:* ${latency < 200 ? 'DIAMOND' : latency < 500 ? 'GOLD' : 'SILVER'}\n\n` +
-      `⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+      `┏━━━━━━━━━━━━━━━━━━━━┓\n` +
+      `┃  SYSTEM DIAGNOSTICS  ┃\n` +
+      `┣━━━━━━━━━━━━━━━━━━━━┫\n` +
+      `┃ Latency: ${latency}ms${' '.repeat(11-latency.toString().length)}┃\n` +
+      `┃ Uptime: ${formatUptime(uptime)}${' '.repeat(11-formatUptime(uptime).length)}┃\n` +
+      `┣━━━━━━━━━━━━━━━━━━━━┫\n` +
+      `┃ Status: Operational ┃\n` +
+      `┗━━━━━━━━━━━━━━━━━━━━┛\n\n` +
+      `⚡ Powered by Iconic Tech`,
       {
         chat_id: chatId,
         message_id: loadingMsg.message_id,
-        parse_mode: "Markdown",
-        reply_markup: {
-          inline_keyboard: [
-            [{
-              text: "🔄 Re-run Diagnostics",
-              callback_data: "reping"
-            }],
-            [{
-              text: "📊 System Details",
-              callback_data: "sysinfo"
-            }]
-          ]
-        }
+        parse_mode: "Markdown"
       }
     );
 
-    // Callback handlers
-    bot.on('callback_query', async (callbackQuery) => {
-      if (callbackQuery.data === "reping") {
-        await bot.answerCallbackQuery(callbackQuery.id, { text: "Re-running diagnostics..." });
-        // Trigger the ping command again
-        bot.sendMessage(chatId, "/ping", { parse_mode: "Markdown" });
-      }
-      else if (callbackQuery.data === "sysinfo") {
-        await bot.answerCallbackQuery(callbackQuery.id);
-        await bot.sendMessage(
-          chatId,
-          `🖥️ *System Specifications*\n\n` +
-          `• Node.js: ${process.version}\n` +
-          `• Platform: ${process.platform}\n` +
-          `• Memory: ${(process.memoryUsage().rss / 1024 / 1024).toFixed(2)}MB\n\n` +
-          `👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n` +
-          `⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
-          { parse_mode: "Markdown" }
-        );
-      }
-    });
-
   } catch (error) {
-    console.error("Ping command error:", error);
     await bot.sendMessage(
       chatId,
-      `⚠️ *Quantum Fluctuation Detected*\n\n` +
-      `Temporal diagnostics failed!\n` +
-      `Error: ${error.message}\n\n` +
-      `👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n` +
-      `⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+      `┏━━━━━━━━━━━━━━━━━━━━┓\n` +
+      `┃    SYSTEM ERROR     ┃\n` +
+      `┣━━━━━━━━━━━━━━━━━━━━┫\n` +
+      `┃ ${error.message.slice(0,16)}${' '.repeat(16-error.message.slice(0,16).length)}┃\n` +
+      `┗━━━━━━━━━━━━━━━━━━━━┛`,
       { parse_mode: "Markdown" }
     );
   }
@@ -2677,7 +3259,7 @@ case "pixabay": {
 
   // NSFW keyword filter
   const nsfwKeywords = [
-    'porn', 'xxx', 'sex', 'tities', 'titties', 'nude', 'nsfw', 'hentai', 'adult', 'erotic',
+    'porn', 'xxx', 'sex', 'tities', 'boobie', 'titties', 'nude', 'nsfw', 'hentai', 'adult', 'erotic',
     'pornography', 'sexy', 'fuck', 'dick', 'cock', 'pussy', 'ass', 'boobs',
     'tits', 'naked', 'nudes', 'blowjob', 'cum', 'suck', 'fucking', 'anal',
     'vagina', 'penis', 'bdsm', 'fetish', 'hardcore', 'masturbation'
@@ -2908,7 +3490,7 @@ case "dhammapada": {
 
   // List of blocked keywords (can be expanded)
   const blockedKeywords = [
-    'porn', 'xxx', 'sex', 'tities', 'titties', 'nude', 'nsfw', 'hentai', 'adult', 'erotic',
+    'porn', 'xxx', 'sex', 'tities', 'titties','boobie',' homosexual','nude', 'nsfw', 'hentai', 'adult', 'erotic',
     'pornography', 'sexy', 'fuck', 'dick', 'cock', 'pussy', 'ass', 'boobs',
     'tits', 'naked', 'nudes', 'blowjob', 'cum', 'suck', 'fucking', 'anal',
     'vagina', 'penis', 'bdsm', 'fetish', 'hardcore', 'masturbation'
@@ -3033,6 +3615,126 @@ case "dog": {
   }
   break;
 }
+case "img-google": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const userQuery = args.join(" ").trim();
+
+  // List of blocked keywords (can be expanded)
+  const blockedKeywords = [
+    'porn', 'xxx', 'sex', 'tities', 'titties','boobie',' homosexual','nude', 'nsfw', 'hentai', 'adult', 'erotic',
+    'pornography', 'sexy', 'fuck', 'dick', 'cock', 'pussy', 'ass', 'boobs',
+    'tits', 'naked', 'nudes', 'blowjob', 'cum', 'suck', 'fucking', 'anal',
+    'vagina', 'penis', 'bdsm', 'fetish', 'hardcore', 'masturbation'
+  ];
+
+  // Check if query contains any blocked keywords
+  const containsBlocked = blockedKeywords.some(keyword => 
+    userQuery.toLowerCase().includes(keyword.toLowerCase())
+  );
+
+  if (containsBlocked) {
+    return bot.sendMessage(
+      chatId,
+      `⚠️ *Content Not Allowed* ⚠️\n\n` +
+      `Your search for "${userQuery}" contains blocked terms.\n` +
+      `This bot does not allow adult content searches.\n\n` +
+      `👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n` +
+      `⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  if (!userQuery) {
+    return bot.sendMessage(
+      chatId,
+      `📸 *Image Search* 📸\n\n` +
+      `Usage: /img <search term>\n` +
+      `Example: /img sunset\n\n` +
+      `👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n` +
+      `⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  try {
+    // Show loading animation
+    const loadingMsg = await bot.sendMessage(
+      chatId,
+      `🔍 *Searching Images* 🔍\n\n` +
+      `▰▱▱▱▱▱▱▱▱▱ 20%\n` +
+      `Looking for "${userQuery}"...`,
+      { parse_mode: "Markdown" }
+    );
+
+    const apiUrl = `https://api.agatz.xyz/api/gimage?message=${encodeURIComponent(userQuery)}`;
+    const response = await fetch(apiUrl);
+    
+    if (!response.ok) {
+      throw new Error(`API error! Status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+   // Debugging: Log the entire data object to the console
+    console.log("API Response:", data);
+
+    if (!data || !data.result || !Array.isArray(data.result) || data.result.length === 0) {
+        console.log("No images found in API response");
+        throw new Error('No images found in the API response');
+    }
+    
+    const imagesToSend = data.result.slice(0, 5);
+    let imagesSent = 0;
+
+    for (let i = 0; i < imagesToSend.length; i++) {
+      try {
+        await bot.sendPhoto(
+          chatId,
+          imagesToSend[i],
+          {
+            caption: `🖼️ Image ${i + 1} for "${userQuery}"\n\n` +
+                     `👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊ᴛᴀ*\n` +
+                     `⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+            parse_mode: "Markdown"
+          }
+        );
+        imagesSent++;
+      } catch (imageError) {
+        console.error(`Error sending image ${i + 1}:`, imageError);
+      }
+    }
+
+    if (imagesSent === 0) {
+      throw new Error('No images could be sent');
+    }
+    // Final message showing completion
+    await bot.sendMessage(
+      chatId,
+      `✅ Sent ${imagesSent} images for "${userQuery}"\n\n` +
+      `👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟ᴀ ᴀɪ ʙᴀᴛᴀ*\n` +
+      `⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+      { parse_mode: "Markdown" }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+
+  } catch (error) {
+    console.error("Image command error:", error);
+    await bot.sendMessage(
+      chatId,
+      `⚠️ *Image Search Failed* ⚠️\n\n` +
+      `Couldn't find images for "${userQuery}"\n` +
+      `• Try different keywords\n` +
+      `• Check your spelling\n` +
+      `• The service might be temporarily unavailable\n\n` +
+      `👑 *𝚀𝚞𝚎𝚎𝚗 ʀᴜᴠᴀ ᴀɪ ʙᴀᴛᴀ*\n` +
+      `⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+      { parse_mode: "Markdown" }
+    );
+  }
+  break;
+}
 
 case "cat": {
   const chatId = msg.chat.id;
@@ -3095,6 +3797,2758 @@ case "duck": {
     await bot.sendMessage(chatId, "⚠️ Couldn't fetch a duck picture. Try again later.");
   }
   break;
+}
+case "deletetext": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const textToDelete = args.join(" ").trim();
+
+  if (!textToDelete) {
+    return bot.sendMessage(
+      chatId,
+      "🧹 *Disappearing Text Generator* 🧹\n\n" +
+      "Usage: /deletetext <your message>\n" +
+      "Example: /deletetext This will vanish\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  
+  try {
+    loadingMsg = await bot.sendMessage(
+      chatId,
+      "🌀 Making text disappear...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedText = encodeURIComponent(textToDelete);
+    const response = await fetch(`https://api.agungny.my.id/api/deletingtext?q=${encodedText}`);
+    
+    if (!response.ok) {
+      throw new Error(`API request failed with status ${response.status}`);
+    }
+
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('image')) {
+      // For direct image responses (GIF/WebP)
+      await bot.sendAnimation(
+        chatId,
+        response.url,
+        {
+          caption: `🧹 *Poof! Text vanished*\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+          parse_mode: "Markdown"
+        }
+      );
+    } else if (contentType && contentType.includes('video')) {
+      // For MP4 videos
+      await bot.sendVideo(
+        chatId,
+        response.url,
+        {
+          caption: `🎥 *Text deletion effect*\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+          parse_mode: "Markdown"
+        }
+      );
+    } else {
+      // Try to parse as JSON if not media
+      const data = await response.json();
+      const resultUrl = data.url || data.image || data.result;
+      
+      if (resultUrl) {
+        await bot.sendAnimation(
+          chatId,
+          resultUrl,
+          {
+            caption: `🧹 *Text deletion effect*\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+            parse_mode: "Markdown"
+          }
+        );
+      } else {
+        throw new Error("No media URL found in response");
+      }
+    }
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("DeleteText command error:", error);
+    
+    let errorMessage = "⚠️ Failed to make text disappear. The magic backfired!";
+    if (error.message.includes('Unexpected token') || error.message.includes('JSON')) {
+      errorMessage += "\n\n(Received unexpected response format)";
+    }
+
+    await bot.sendMessage(chatId, errorMessage);
+    
+    if (loadingMsg) {
+      await bot.deleteMessage(chatId, loadingMsg.message_id).catch(e => console.error("Failed to delete loading message:", e));
+    }
+  }
+  break;
+}
+case "summer": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const summerText = args.join(" ").trim();
+
+  if (!summerText) {
+    return bot.sendMessage(
+      chatId,
+      "🏖️ *Summer Sand Text Generator* 🏖️\n\n" +
+      "Usage: /summer <your text>\n" +
+      "Example: /summer Beach vibes\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  
+  try {
+    loadingMsg = await bot.sendMessage(
+      chatId,
+      "🏝️ Writing in the sand...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedText = encodeURIComponent(summerText);
+    const response = await fetch(`https://api.agungny.my.id/api/sandsummer?q=${encodedText}`);
+    
+    if (!response.ok) {
+      throw new Error(`API request failed with status ${response.status}`);
+    }
+
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('image')) {
+      // For direct image responses
+      await bot.sendPhoto(
+        chatId,
+        response.url,
+        {
+          caption: `🏖️ *Sand Writing:* ${summerText}\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+          parse_mode: "Markdown"
+        }
+      );
+    } else {
+      // For JSON responses containing image URLs
+      const data = await response.json();
+      const imageUrl = data.url || data.image || data.result;
+      
+      if (imageUrl) {
+        await bot.sendPhoto(
+          chatId,
+          imageUrl,
+          {
+            caption: `🏖️ *Sand Writing:* ${summerText}\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+            parse_mode: "Markdown"
+          }
+        );
+      } else {
+        throw new Error("No image URL found in response");
+      }
+    }
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Summer command error:", error);
+    
+    let errorMessage = "⚠️ Failed to create sand text. The tide washed it away!";
+    if (error.message.includes('Unexpected token') || error.message.includes('JSON')) {
+      errorMessage += "\n\n(Received unexpected response format)";
+    }
+
+    await bot.sendMessage(chatId, errorMessage);
+    
+    if (loadingMsg) {
+      await bot.deleteMessage(chatId, loadingMsg.message_id).catch(e => console.error("Failed to delete loading message:", e));
+    }
+  }
+  break;
+}
+case "diffusion": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const prompt = args.join(" ").trim();
+
+  if (!prompt) {
+    return bot.sendMessage(
+      chatId,
+      "🎨 *AI Image Generator* 🎨\n\n" +
+      "Usage: /diffusion <your prompt>\n" +
+      "Example: /diffusion a cat wearing sunglasses\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  try {
+    const loadingMsg = await bot.sendMessage(
+      chatId,
+      "🎨 Painting your imagination...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedPrompt = encodeURIComponent(prompt);
+    const imageUrl = `https://apis.davidcyriltech.my.id/diffusion?prompt=${encodedPrompt}`;
+
+    await bot.sendPhoto(
+      chatId,
+      imageUrl,
+      {
+        caption: `🖼️ *AI Generated Image:*\n"${prompt}"\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Diffusion command error:", error);
+    await bot.sendMessage(
+      chatId,
+      "⚠️ Failed to generate image. The artist needs more inspiration..."
+    );
+  }
+  break;
+}
+case "book": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const text = args.join(" ").trim();
+
+  if (!text) {
+    return bot.sendMessage(
+      chatId,
+      "📚 *Book Cover Generator* 📚\n\n" +
+      "Usage: /book <title>\n" +
+      "Example: /book My Awesome Book\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 �𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  try {
+    const loadingMsg = await bot.sendMessage(
+      chatId,
+      "📖 Designing your book cover...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedText = encodeURIComponent(text);
+    // Using size=30 as shown in your example URL
+    const imageUrl = `https://apis.davidcyriltech.my.id/generate/book?text=${encodedText}&size=30`;
+
+    await bot.sendPhoto(
+      chatId,
+      imageUrl,
+      {
+        caption: `📚 *Book Cover:* "${text}"\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Book command error:", error);
+    await bot.sendMessage(
+      chatId,
+      "⚠️ Failed to generate book cover. The library is closed for renovations..."
+    );
+  }
+  break;
+}
+case "animebrat": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const queryText = args.join(" ").trim();
+
+  if (!queryText) {
+    return bot.sendMessage(
+      chatId,
+      "🎭 *Animated Brat Generator* 🎭\n\n" +
+      "Usage: /animbrat <your text>\n" +
+      "Example: /animbrat Apa kabar\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  
+  try {
+    loadingMsg = await bot.sendMessage(
+      chatId,
+      "🌀 Generating animated response...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedText = encodeURIComponent(queryText);
+    const response = await fetch(`https://api.agungny.my.id/api/animbrat?q=${encodedText}`);
+    
+    if (!response.ok) {
+      throw new Error(`API request failed with status ${response.status}`);
+    }
+
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('image')) {
+      // For GIF/WebP animated images
+      await bot.sendAnimation(
+        chatId,
+        response.url,
+        {
+          caption: `🎭 *Animated Brat Response*\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+          parse_mode: "Markdown"
+        }
+      );
+    } else if (contentType && contentType.includes('video')) {
+      // For MP4 videos
+      await bot.sendVideo(
+        chatId,
+        response.url,
+        {
+          caption: `🎥 *Animated Brat Video*\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+          parse_mode: "Markdown"
+        }
+      );
+    } else {
+      // Try to parse as JSON if not media
+      const data = await response.json();
+      const resultText = data.result || data.text || data.message || JSON.stringify(data);
+      
+      await bot.sendMessage(
+        chatId,
+        `🎭 *Animated Brat Response:*\n${resultText}\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        {
+          parse_mode: "Markdown",
+          reply_to_message_id: msg.message_id
+        }
+      );
+    }
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("AnimBrat command error:", error);
+    
+    let errorMessage = "⚠️ Failed to generate animated response. The animation studio is closed!";
+    if (error.message.includes('Unexpected token') || error.message.includes('JSON')) {
+      errorMessage += "\n\n(Received unexpected response format)";
+    }
+
+    await bot.sendMessage(chatId, errorMessage);
+    
+    if (loadingMsg) {
+      await bot.deleteMessage(chatId, loadingMsg.message_id).catch(e => console.error("Failed to delete loading message:", e));
+    }
+  }
+  break;
+}
+case "carbon": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const codeText = args.join(" ").trim();
+
+  if (!codeText) {
+    return bot.sendMessage(
+      chatId,
+      "💻 *Carbon Code Image Generator* 💻\n\n" +
+      "Usage: /carbon <your code>\n" +
+      "Example: /carbon console.log('Hello World')\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  
+  try {
+    loadingMsg = await bot.sendMessage(
+      chatId,
+      "🖥️ Generating code image...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedText = encodeURIComponent(codeText);
+    const apiUrl = `https://api.agungny.my.id/api/carbon?q=${encodedText}`;
+    
+    // Alternative image download method
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API failed with status ${response.status}`);
+    
+    // Convert response to buffer
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    if (!buffer || buffer.length < 100) throw new Error("Invalid image received");
+
+    // Send the image
+    await bot.sendPhoto(
+      chatId,
+      buffer,
+      {
+        caption: `💻 *Code Snippet*\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Carbon command error:", error);
+    await bot.sendMessage(
+      chatId,
+      "⚠️ Failed to generate code image. Please try again later."
+    );
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+case "fluxwebui": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  
+  // Extract ratio if provided (format: /fluxwebui prompt ratio=1:1)
+  let promptText = args.join(" ").trim();
+  let ratio = "1:1"; // Default ratio
+  
+  // Check for ratio parameter
+  const ratioMatch = promptText.match(/ratio=([\d:]+)/i);
+  if (ratioMatch) {
+    ratio = ratioMatch[1];
+    promptText = promptText.replace(/ratio=[\d:]+/i, '').trim();
+  }
+
+  if (!promptText) {
+    return bot.sendMessage(
+      chatId,
+      "🎨 *Advanced Anime Image Generator* 🎨\n\n" +
+      "Usage: /fluxwebui <prompt> [ratio=1:1]\n" +
+      "Example: /fluxwebui Anime girl with blue hair\n" +
+      "Example: /fluxwebui Cyberpunk city ratio=16:9\n\n" +
+      "Supported ratios: 1:1, 4:3, 3:4, 16:9, 9:16\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  �ᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  
+  try {
+    loadingMsg = await bot.sendMessage(
+      chatId,
+      `🎨 Generating anime image (ratio: ${ratio})...`,
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedPrompt = encodeURIComponent(promptText);
+    const encodedRatio = encodeURIComponent(ratio);
+    const apiUrl = `https://kaiz-apis.gleeze.com/api/fluxwebui?prompt=${encodedPrompt}&ratio=${encodedRatio}`;
+    
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API failed with status ${response.status}`);
+    
+    // Convert response to buffer
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    if (!buffer || buffer.length < 100) throw new Error("Invalid image received");
+
+    // Send the image
+    await bot.sendPhoto(
+      chatId,
+      buffer,
+      {
+        caption: `🎨 *Anime Image Prompt:* ${promptText}\n*Ratio:* ${ratio}\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ �ᴇᴄʜ`,
+        parse_mode: "Markdown"
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Fluxwebui command error:", error);
+    await bot.sendMessage(
+      chatId,
+      "⚠️ Failed to generate anime image. Please try again later."
+    );
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+case "poli": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const promptText = args.join(" ").trim();
+
+  if (!promptText) {
+    return bot.sendMessage(
+      chatId,
+      "🎨 *Poli Anime Image Generator* 🎨\n\n" +
+      "Usage: /poli <your prompt>\n" +
+      "Example: /poli Anime girl with pink hair\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  
+  try {
+    loadingMsg = await bot.sendMessage(
+      chatId,
+      "🎨 Generating Poli anime image...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedText = encodeURIComponent(promptText);
+    const apiUrl = `https://kaiz-apis.gleeze.com/api/poli?prompt=${encodedText}`;
+    
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API failed with status ${response.status}`);
+    
+    // Convert response to buffer
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    if (!buffer || buffer.length < 100) throw new Error("Invalid image received");
+
+    // Send the image
+    await bot.sendPhoto(
+      chatId,
+      buffer,
+      {
+        caption: `🎨 *Poli Anime Image Prompt:* ${promptText}\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Poli command error:", error);
+    await bot.sendMessage(
+      chatId,
+      "⚠️ Failed to generate Poli anime image. Please try again later."
+    );
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+case "text2image": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const promptText = args.join(" ").trim();
+
+  if (!promptText) {
+    return bot.sendMessage(
+      chatId,
+      "🖼️ *Text to Image Generator* 🖼️\n\n" +
+      "Usage: /text2image <your prompt>\n" +
+      "Example: /text2image Hacker working late at night\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  
+  try {
+    loadingMsg = await bot.sendMessage(
+      chatId,
+      "🖌️ Generating image from text...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedText = encodeURIComponent(promptText);
+    const apiUrl = `https://kaiz-apis.gleeze.com/api/text2image?prompt=${encodedText}`;
+    
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API failed with status ${response.status}`);
+    
+    // Convert response to buffer
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    if (!buffer || buffer.length < 100) throw new Error("Invalid image received");
+
+    // Send the image
+    await bot.sendPhoto(
+      chatId,
+      buffer,
+      {
+        caption: `🖼️ *Generated Image:* ${promptText}\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Text2Image command error:", error);
+    await bot.sendMessage(
+      chatId,
+      "⚠️ Failed to generate image. Please try again later."
+    );
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+case "reimagine": {
+  const chatId = msg.chat.id;
+  
+  // Check for replied photo or URL
+  const hasRepliedPhoto = msg.reply_to_message?.photo;
+  const args = msg.text.split(" ").slice(1);
+  const imageUrl = args.join(" ").trim();
+
+  if (!hasRepliedPhoto && !imageUrl) {
+    return bot.sendMessage(
+      chatId,
+      "🎨 *Image Reimaginer* 🎨\n\n" +
+      "Usage:\n" +
+      "1. Reply to an image with /reimagine\n" +
+      "2. Or use /reimagine <image-url>\n\n" +
+      "Example:\n" +
+      "/reimagine https://example.com/image.jpg\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  
+  try {
+    loadingMsg = await bot.sendMessage(
+      chatId,
+      "🔄 Reimagining your image...",
+      { parse_mode: "Markdown" }
+    );
+
+    let finalImageUrl;
+    
+    if (hasRepliedPhoto) {
+      // Get the highest quality photo from replied message
+      const photo = msg.reply_to_message.photo.reduce((prev, current) => 
+        (prev.file_size > current.file_size) ? prev : current
+      );
+      
+      // Get file path from Telegram
+      const fileInfo = await bot.getFile(photo.file_id);
+      finalImageUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_TOKEN}/${fileInfo.file_path}`;
+    } else {
+      // Use provided URL
+      finalImageUrl = imageUrl;
+    }
+
+    const encodedUrl = encodeURIComponent(finalImageUrl);
+    const apiUrl = `https://kaiz-apis.gleeze.com/api/reimagine?url=${encodedUrl}`;
+    
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API failed with status ${response.status}`);
+    
+    // Convert response to buffer
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    if (!buffer || buffer.length < 100) throw new Error("Invalid image received");
+
+    // Send the reimagined image
+    await bot.sendPhoto(
+      chatId,
+      buffer,
+      {
+        caption: "🎨 *Reimagined Image*\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+        parse_mode: "Markdown",
+        reply_to_message_id: msg.message_id
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Reimagine command error:", error);
+    await bot.sendMessage(
+      chatId,
+      "⚠️ Failed to reimagine image. Please ensure:\n" +
+      "1. You replied to an image OR provided a valid URL\n" +
+      "2. The image is not too large\n" +
+      "3. Try again later"
+    );
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+case "lepton": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const promptText = args.join(" ").trim();
+
+  if (!promptText) {
+    return bot.sendMessage(
+      chatId,
+      "🌟 *Lepton SDXL Image Generator* 🌟\n\n" +
+      "Usage: /lepton <your prompt>\n" +
+      "Example: /lepton Anime warrior with glowing sword\n\n" +
+      "🔹 Generates high-quality Stable Diffusion XL images\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ �ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  
+  try {
+    loadingMsg = await bot.sendMessage(
+      chatId,
+      "✨ Generating high-quality image with Lepton SDXL...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedText = encodeURIComponent(promptText);
+    const apiUrl = `https://kaiz-apis.gleeze.com/api/lepton-sdxl?prompt=${encodedText}`;
+    
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API failed with status ${response.status}`);
+    
+    // Convert response to buffer
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    if (!buffer || buffer.length < 100) throw new Error("Invalid image received");
+
+    // Send the generated image
+    await bot.sendPhoto(
+      chatId,
+      buffer,
+      {
+        caption: `🌟 *Lepton SDXL Generated:* ${promptText}\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Lepton command error:", error);
+    await bot.sendMessage(
+      chatId,
+      "⚠️ Failed to generate image. Please:\n" +
+      "• Check your prompt\n" +
+      "• Try a different description\n" +
+      "• Wait and try again later"
+    );
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+case "codestral": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const queryText = args.join(" ").trim();
+
+  if (!queryText) {
+    return bot.sendMessage(
+      chatId,
+      "💻 *Codestral Code Generator* 💻\n\n" +
+      "Usage: /codestral <language> <description>\n" +
+      "Example: /codestral Python Fibonacci sequence\n" +
+      "Example: /codestral Html website template\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  
+  try {
+    loadingMsg = await bot.sendMessage(
+      chatId,
+      "⌨️ Generating code...",
+      { parse_mode: "Markdown" }
+    );
+
+    // Split into language and description
+    const [language, ...descriptionParts] = queryText.split(" ");
+    const description = descriptionParts.join(" ");
+    
+    const encodedQuery = encodeURIComponent(language);
+    const encodedUid = encodeURIComponent(description);
+    const apiUrl = `https://kaiz-apis.gleeze.com/api/codestral-latest?q=${encodedQuery}&uid=${encodedUid}`;
+    
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API failed with status ${response.status}`);
+
+    const contentType = response.headers.get('content-type');
+    let result;
+
+    if (contentType && contentType.includes('application/json')) {
+      const data = await response.json();
+      result = data.result || data.code || data.response || JSON.stringify(data);
+    } else {
+      result = await response.text();
+    }
+
+    // Format code with Markdown if it looks like code
+    const formattedResult = result.includes('\n') || 
+                          result.includes('{') || 
+                          result.includes('<') || 
+                          result.includes(';')
+                          ? `\`\`\`${language.toLowerCase()}\n${result}\n\`\`\``
+                          : result;
+
+    await bot.sendMessage(
+      chatId,
+      `💻 *Code Generated* (${language})\n${formattedResult}\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+      {
+        parse_mode: "Markdown",
+        reply_to_message_id: msg.message_id
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Codestral command error:", error);
+    
+    let errorMessage = "⚠️ Failed to generate code. Please try again later.";
+    if (error.message.includes('Unexpected token') || error.message.includes('JSON')) {
+      errorMessage += "\n\n(Received unexpected response format)";
+    }
+
+    await bot.sendMessage(chatId, errorMessage);
+    
+    if (loadingMsg) {
+      await bot.deleteMessage(chatId, loadingMsg.message_id).catch(e => console.error("Failed to delete loading message:", e));
+    }
+  }
+  break;
+}
+case "codestral-mamba": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const queryText = args.join(" ").trim();
+
+  if (!queryText) {
+    return bot.sendMessage(
+      chatId,
+      "💎 *Codestral-Mamba Code Generator* 💎\n\n" +
+      "Usage: /codestral-mamba <language> <description>\n" +
+      "Example: /codestral-mamba Html responsive navbar\n" +
+      "Example: /codestral-mamba Python async web scraper\n\n" +
+      "✨ Specialized code generation with Mamba architecture\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  
+  try {
+    loadingMsg = await bot.sendMessage(
+      chatId,
+      "💎 Generating optimized code with Mamba...",
+      { parse_mode: "Markdown" }
+    );
+
+    // Split into language and description
+    const [language, ...descriptionParts] = queryText.split(" ");
+    const description = descriptionParts.join(" ");
+    
+    const encodedQuery = encodeURIComponent(language);
+    const encodedUid = encodeURIComponent(description);
+    const apiUrl = `https://kaiz-apis.gleeze.com/api/codestral-mamba?q=${encodedQuery}&uid=${encodedUid}`;
+    
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API failed with status ${response.status}`);
+
+    // Handle both JSON and text responses
+    let codeResult;
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType?.includes('application/json')) {
+      const data = await response.json();
+      codeResult = data.result || data.code || data.response || JSON.stringify(data, null, 2);
+    } else {
+      codeResult = await response.text();
+    }
+
+    // Format with proper code blocks
+    const formattedCode = codeResult.includes('\n') || 
+                        /[{}<>;=]/.test(codeResult)
+                        ? `\`\`\`${language.toLowerCase()}\n${codeResult}\n\`\`\``
+                        : codeResult;
+
+    // Send the generated code
+    await bot.sendMessage(
+      chatId,
+      `💎 *Mamba-Generated ${language} Code*\n${formattedCode}\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+      {
+        parse_mode: "Markdown",
+        reply_to_message_id: msg.message_id,
+        disable_web_page_preview: true
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Codestral-Mamba error:", error);
+    
+    await bot.sendMessage(
+      chatId,
+      "⚠️ Code generation failed. Possible issues:\n" +
+      "• Invalid language specified\n" +
+      "• Overly complex request\n" +
+      "• API temporarily unavailable\n\n" +
+      "Try simplifying your request or try again later."
+    );
+    
+    if (loadingMsg) {
+      await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+    }
+  }
+  break;
+}
+case "consensus": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const searchQuery = args.join(" ").trim();
+
+  if (!searchQuery) {
+    return bot.sendMessage(
+      chatId,
+      "🔍 *Code Consensus Finder* 🔍\n\n" +
+      "Usage: /consensus <search query>\n" +
+      "Example: /consensus HTML login form template\n" +
+      "Example: /consensus Python Fibonacci sequence\n\n" +
+      "Finds the most agreed-upon code solutions from multiple sources\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  
+  try {
+    loadingMsg = await bot.sendMessage(
+      chatId,
+      "🔍 Finding consensus solutions...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedQuery = encodeURIComponent(searchQuery);
+    const apiUrl = `https://kaiz-apis.gleeze.com/api/consensus?search=${encodedQuery}`;
+    
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API failed with status ${response.status}`);
+
+    // Handle both JSON and text responses
+    let result;
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType?.includes('application/json')) {
+      const data = await response.json();
+      result = data.result || data.solution || data.answer || JSON.stringify(data, null, 2);
+    } else {
+      result = await response.text();
+    }
+
+    // Format code blocks if detected
+    const formattedResult = result.includes('\n') || 
+                          /[{}<>;=]/.test(result)
+                          ? `\`\`\`\n${result}\n\`\`\``
+                          : result;
+
+    // Send the results
+    await bot.sendMessage(
+      chatId,
+      `🔍 *Consensus Solution for:* ${searchQuery}\n\n${formattedResult}\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+      {
+        parse_mode: "Markdown",
+        reply_to_message_id: msg.message_id,
+        disable_web_page_preview: true
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Consensus command error:", error);
+    
+    await bot.sendMessage(
+      chatId,
+      "⚠️ Failed to find consensus. Please:\n" +
+      "• Try a different search query\n" +
+      "• Be more specific in your request\n" +
+      "• Try again later\n\n" +
+      "Common issues:\n" +
+      "• Too broad search terms\n" +
+      "• Niche topic with little available data",
+      { reply_to_message_id: msg.message_id }
+    );
+    
+    if (loadingMsg) {
+      await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+    }
+  }
+  break;
+}
+case "catfact": {
+  const chatId = msg.chat.id;
+  
+  try {
+    // Show loading message with cat emoji
+    const loadingMsg = await bot.sendMessage(
+      chatId,
+      "🐱 Fetching a purr-fect cat fact for you...",
+      { parse_mode: "Markdown" }
+    );
+
+    // Call the API
+    const response = await fetch('https://api.dreaded.site/api/catfact');
+    if (!response.ok) throw new Error(`API failed with status ${response.status}`);
+    
+    // Parse response (adjust based on actual API response structure)
+    const data = await response.json();
+    const fact = data.fact || data.data || "No cat fact available right now";
+    
+    // Send the cat fact with cute formatting
+    await bot.sendMessage(
+      chatId,
+      `🐾 *Cat Fact* 🐾\n\n${fact}\n\n` +
+      `_Want another? Just send /catfact again!_` +
+      `\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 �𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+      {
+        parse_mode: "Markdown",
+        reply_to_message_id: msg.message_id
+      }
+    );
+    
+    // Delete loading message
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+    
+  } catch (error) {
+    console.error("Catfact command error:", error);
+    await bot.sendMessage(
+      chatId,
+      "😿 *Meow-velous Disaster!*\n" +
+      "The cats are napping and won't give us facts right now.\n" +
+      "Please try again later when they wake up!",
+      { 
+        parse_mode: "Markdown",
+        reply_to_message_id: msg.message_id
+      }
+    );
+  }
+  break;
+}
+case "glow": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const glowText = args.join(" ").trim();
+
+  if (!glowText) {
+    return bot.sendMessage(
+      chatId,
+      "✨ *Advanced Glow Text Generator* ✨\n\n" +
+      "Usage: /glow <your text>\n" +
+      "Example: /glow Neon lights\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  
+  try {
+    loadingMsg = await bot.sendMessage(
+      chatId,
+      "🔮 Creating glowing text effect...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedText = encodeURIComponent(glowText);
+    const apiUrl = `https://api.agungny.my.id/api/advancedglow?q=${encodedText}`;
+    
+    // Alternative image download method
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API failed with status ${response.status}`);
+    
+    // Convert response to buffer
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    if (!buffer || buffer.length < 100) throw new Error("Invalid image received");
+
+    // Send the image
+    await bot.sendPhoto(
+      chatId,
+      buffer,
+      {
+        caption: `✨ *Glowing Text:* ${glowText}\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Glow command error:", error);
+    await bot.sendMessage(
+      chatId,
+      "⚠️ Failed to generate glow effect. Please try again later."
+    );
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+case "brat": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const queryText = args.join(" ").trim();
+
+  if (!queryText) {
+    return bot.sendMessage(
+      chatId,
+      "🎤 *Brat API Generator* 🎤\n\n" +
+      "Usage: /brat <your text>\n" +
+      "Example: /brat Hai\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  
+  try {
+    loadingMsg = await bot.sendMessage(
+      chatId,
+      "⏳ Processing your request...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedText = encodeURIComponent(queryText);
+    const response = await fetch(`https://api.agungny.my.id/api/bratv1?q=${encodedText}`);
+    
+    if (!response.ok) {
+      throw new Error(`API request failed with status ${response.status}`);
+    }
+
+    // Check content type to handle both JSON and image responses
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('image')) {
+      // If it's an image, send as photo
+      await bot.sendPhoto(
+        chatId,
+        response.url,
+        {
+          caption: `🎤 *Brat API Response*\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+          parse_mode: "Markdown"
+        }
+      );
+    } else {
+      // Try to parse as JSON
+      const data = await response.json();
+      const resultText = data.result || data.text || data.message || JSON.stringify(data);
+      
+      await bot.sendMessage(
+        chatId,
+        `🎤 *Brat API Response:*\n${resultText}\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        {
+          parse_mode: "Markdown",
+          reply_to_message_id: msg.message_id
+        }
+      );
+    }
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Brat command error:", error);
+    
+    let errorMessage = "⚠️ Failed to process Brat request. Try again later.";
+    if (error.message.includes('Unexpected token') || error.message.includes('JSON')) {
+      errorMessage += "\n\n(Received unexpected response format)";
+    }
+
+    await bot.sendMessage(chatId, errorMessage);
+    
+    if (loadingMsg) {
+      await bot.deleteMessage(chatId, loadingMsg.message_id).catch(e => console.error("Failed to delete loading message:", e));
+    }
+  }
+  break;
+}
+case "write": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const userText = args.join(" ").trim();
+
+  if (!userText) {
+    return bot.sendMessage(
+      chatId,
+      "✍️ *Text Generator* ✍️\n\n" +
+      "Usage: /write <your text>\n" +
+      "Example: /write Hello world\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg; // Declare loadingMsg outside try block
+
+  try {
+    loadingMsg = await bot.sendMessage(
+      chatId,
+      "⏳ Generating your text...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedText = encodeURIComponent(userText);
+    const response = await fetch(`https://api.agungny.my.id/api/writetext?q=${encodedText}`);
+    
+    if (!response.ok) {
+      throw new Error(`API request failed with status ${response.status}`);
+    }
+
+    // Check if response is an image first
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('image')) {
+      // If it's an image, send as photo
+      await bot.sendPhoto(
+        chatId,
+        response.url,
+        {
+          caption: `✍️ *Generated Text Image*\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+          parse_mode: "Markdown",
+          reply_to_message_id: msg.message_id
+        }
+      );
+    } else {
+      // Otherwise try to parse as JSON
+      const data = await response.json();
+      const generatedText = data.result || data.text || data.message || "No response text available.";
+
+      await bot.sendMessage(
+        chatId,
+        `✍️ *Generated Text:*\n${generatedText}\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        {
+          parse_mode: "Markdown",
+          reply_to_message_id: msg.message_id
+        }
+      );
+    }
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Write command error:", error);
+    
+    let errorMessage = "⚠️ Failed to generate text. The ink has run dry...";
+    if (error.message.includes('Unexpected token') || error.message.includes('JSON')) {
+      errorMessage += "\n\n(The API returned an unexpected image response)";
+    }
+
+    await bot.sendMessage(chatId, errorMessage);
+    
+    if (loadingMsg) {
+      await bot.deleteMessage(chatId, loadingMsg.message_id).catch(e => console.error("Failed to delete loading message:", e));
+    }
+  }
+  break;
+}
+case "flux": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const promptText = args.join(" ").trim();
+
+  if (!promptText) {
+    return bot.sendMessage(
+      chatId,
+      "🎨 *Anime Image Generator* 🎨\n\n" +
+      "Usage: /flux <your prompt>\n" +
+      "Example: /flux Anime girl with blue hair\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  
+  try {
+    loadingMsg = await bot.sendMessage(
+      chatId,
+      "🎨 Generating anime image...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedText = encodeURIComponent(promptText);
+    const apiUrl = `https://kaiz-apis.gleeze.com/api/flux?prompt=${encodedText}`;
+    
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API failed with status ${response.status}`);
+    
+    // Convert response to buffer
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    if (!buffer || buffer.length < 100) throw new Error("Invalid image received");
+
+    // Send the image
+    await bot.sendPhoto(
+      chatId,
+      buffer,
+      {
+        caption: `🎨 *Anime Image Prompt:* ${promptText}\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 �𝙰𝙸 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Flux command error:", error);
+    await bot.sendMessage(
+      chatId,
+      "⚠️ Failed to generate anime image. Please try again later."
+    );
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+case "ngl": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+
+  if (args.length === 0) {
+    return bot.sendMessage(
+      chatId,
+      "🔗 *NGL Link Fetcher* 🔗\n\n" +
+      "Usage: /ngl <ngl link> [optional text]\n" +
+      "Example: /ngl https://ngl.link/xxxx Hello there!\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  const link = args[0];
+  const text = args.slice(1).join(" ") || "Hello";
+
+  let loadingMsg;
+  try {
+    loadingMsg = await bot.sendMessage(chatId, "🔄 Fetching NGL data...", { parse_mode: "Markdown" });
+
+    const encodedLink = encodeURIComponent(link);
+    const encodedText = encodeURIComponent(text);
+    const apiUrl = `https://api.siputzx.my.id/api/tools/ngl?link=${encodedLink}&text=${encodedText}`;
+
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+
+    const data = await response.json();
+    console.log("NGL API response:", data); // Debug line
+
+    // Check for expected field in response; adjust as needed
+    const resultText = data.result || data.message || JSON.stringify(data);
+
+    await bot.sendMessage(
+      chatId,
+      `🔗 *NGL Link Result*\n\n${resultText}\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+      { parse_mode: "Markdown", reply_to_message_id: msg.message_id }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("NGL command error:", error);
+
+    await bot.sendMessage(chatId, "⚠️ Failed to fetch NGL data. Please check the link and try again.");
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+case "sertifikat": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const name = args.join(" ").trim();
+
+  if (!name) {
+    return bot.sendMessage(
+      chatId,
+      "📜 *Sertifikat Tolol Generator* 📜\n\n" +
+      "Usage: /sertifikat <name>\n" +
+      "Example: /sertifikat Jamal\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  try {
+    loadingMsg = await bot.sendMessage(chatId, "📜 Generating sertifikat...", { parse_mode: "Markdown" });
+
+    const encodedName = encodeURIComponent(name);
+    const apiUrl = `https://api.siputzx.my.id/api/m/sertifikat-tolol?text=${encodedName}`;
+
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+
+    // Convert response to buffer
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    if (!buffer || buffer.length < 100) throw new Error("Invalid image received");
+
+    // Send the image
+    await bot.sendPhoto(
+      chatId,
+      buffer,
+      {
+        caption: `📜 *Sertifikat Tolol for:* ${name}\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Sertifikat command error:", error);
+
+    await bot.sendMessage(chatId, "⚠️ Failed to generate sertifikat. Please try again later.");
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+case 'play':
+case 'song': {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const query = args.join(" ").trim();
+
+  if (!query) {
+    return bot.sendMessage(
+      chatId,
+      "🎵 *QUEEN_RUVA_ᴀI_MUSɪC-Pʟᴀʏᴇʀ* 🎵\n\n" +
+      "Usage: /play <song title>\n" +
+      "Example: /play understand by omah lay\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  
+  try {
+    loadingMsg = await bot.sendMessage(
+      chatId,
+      "🔍 Searching for your song...",
+      { parse_mode: "Markdown" }
+    );
+
+    const yts = require("yt-search");
+    const search = await yts(query);
+    const video = search.videos[0];
+
+    if (!video) {
+      throw new Error(`No results found for: ${query}`);
+    }
+
+    // Display song details
+    const caption = `🎶 *QUEEN_RUVA_ᴀI_MUSɪC-Pʟᴀʏᴇʀ*\n` +
+      `🎧 *Title:* ${video.title}\n` +
+      `👀 *Views:* ${video.views}\n` +
+      `⏳ *Duration:* ${video.timestamp}\n` +
+      `🕒 *Uploaded:* ${video.ago}\n` +
+      `🔗 *Url:* ${video.url}\n\n` +
+      `👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n` +
+      `⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`;
+
+    // Send thumbnail first
+    await bot.sendPhoto(chatId, video.thumbnail, {
+      caption: caption,
+      parse_mode: "Markdown"
+    });
+
+    const apiUrl = `https://apis.davidcyriltech.my.id/download/ytmp3?url=${encodeURIComponent(video.url)}`;
+    const response = await fetch(apiUrl);
+    const apiResponse = await response.json();
+
+    if (apiResponse.success) {
+      const { download_url, title } = apiResponse.result;
+
+      // Sending the audio file
+      await bot.sendAudio(chatId, download_url, {
+        title: title,
+        performer: "QUEEN_RUVA_ᴀI_MUSɪC",
+        caption: `🎶 *Here's your song:* ${title}\n🔊 *Enjoy the music and feel the vibes!*\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      });
+
+      await bot.deleteMessage(chatId, loadingMsg.message_id);
+    } else {
+      throw new Error("Failed to fetch the song! Please try again later.");
+    }
+  } catch (error) {
+    console.error('Error during /play command:', error);
+    
+    let errorMessage = "⚠️ An error occurred while processing your request.";
+    if (error.message.includes('No results found')) {
+      errorMessage = `🎶 No results found for: ${query}`;
+    }
+
+    await bot.sendMessage(chatId, errorMessage);
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+case "shazam": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const songTitle = args.join(" ").trim();
+
+  if (!songTitle) {
+    return bot.sendMessage(
+      chatId,
+      "🎵 *Shazam Lyrics Finder* 🎵\n\n" +
+      "Usage: /shazam <song title>\n" +
+      "Example: /shazam Soso\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  
+  try {
+    loadingMsg = await bot.sendMessage(
+      chatId,
+      "🔍 Searching for lyrics...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedTitle = encodeURIComponent(songTitle);
+    const apiUrl = `https://kaiz-apis.gleeze.com/api/shazam-lyrics?title=${encodedTitle}`;
+    
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API failed with status ${response.status}`);
+    
+    // Parse the JSON response
+    const data = await response.json();
+    
+    // Check if we got valid lyrics data
+    if (!data.lyrics || typeof data.lyrics !== 'string') {
+      throw new Error("No lyrics found for this song");
+    }
+
+    // Format the lyrics response
+    const lyricsText = data.lyrics.length > 4000 
+      ? `${data.lyrics.substring(0, 4000)}...\n\n[Message truncated due to length]`
+      : data.lyrics;
+
+    // Send the lyrics
+    await bot.sendMessage(
+      chatId,
+      `🎵 *${songTitle}* 🎵\n\n${lyricsText}\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+      {
+        parse_mode: "Markdown",
+        reply_to_message_id: msg.message_id
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Shazam command error:", error);
+    
+    let errorMessage = "⚠️ Failed to find lyrics for this song.";
+    if (error.message.includes('No lyrics found')) {
+      errorMessage = "🎶 No lyrics found for this song. Try another title.";
+    }
+
+    await bot.sendMessage(chatId, errorMessage);
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+case "logo": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const logoText = args.join(" ").trim();
+
+  if (!logoText) {
+    return bot.sendMessage(
+      chatId,
+      "🖼️ *Logo Generator* 🖼️\n\n" +
+      "Usage: /logo <your text>\n" +
+      "Example: /logo MyBrand\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 �𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  try {
+    const loadingMsg = await bot.sendMessage(
+      chatId,
+      "⏳ Designing your logo...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedText = encodeURIComponent(logoText);
+    const response = await fetch(
+      `https://api.agungny.my.id/api/logomaker?q=${encodedText}`
+    );
+    
+    if (!response.ok) {
+      throw new Error(`API request failed with status ${response.status}`);
+    }
+
+    // First check if the response is an image
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('image')) {
+      // If it's an image, use it directly
+      await bot.sendPhoto(chatId, response.url, {
+        caption: `🖼️ *${logoText}* Logo\n\n👑 *𝚀𝚞𝚎𝚎𝚗 �𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      });
+    } else {
+      // Try to parse as JSON only if not an image
+      const data = await response.json();
+      if (!data || (!data.url && !data.image)) {
+        throw new Error("Invalid API response format");
+      }
+      
+      await bot.sendPhoto(chatId, data.url || data.image, {
+        caption: `🖼️ *${logoText}* Logo\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      });
+    }
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Logo command error:", error);
+    await bot.sendMessage(
+      chatId,
+      "⚠️ Failed to generate logo. The artist's brush broke...\nError: " + error.message
+    );
+    
+    // Delete loading message if it exists
+    if (loadingMsg) {
+      await bot.deleteMessage(chatId, loadingMsg.message_id).catch(e => console.error(e));
+    }
+  }
+  break;
+}
+case "flag": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const flagText = args.join(" ").trim();
+
+  if (!flagText) {
+    return bot.sendMessage(
+      chatId,
+      "🇺🇸 *American Flag 3D Logo Generator* 🇺🇸\n\n" +
+      "Usage: /flag <text>\n" +
+      "Example: /flag Queen Ruva ai beta\n\n" +
+      "👑 *𝚀𝚞ｅｅｎ 𝚁𝚞ｖ𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  try {
+    loadingMsg = await bot.sendMessage(chatId, "⏳ Generating American Flag 3D logo...", { parse_mode: "Markdown" });
+
+    const apiKey = "63b406007be3e32b53";
+    const encodedText = encodeURIComponent(flagText);
+    const apiUrl = `https://api.nexoracle.com/ephoto360/american-flag-3d?apikey=${apiKey}&text=${encodedText}`;
+
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+
+    // Check content type to handle direct image responses
+    const contentType = response.headers.get('content-type');
+
+    if (contentType && contentType.startsWith('image/')) {
+      // It's an image, send it directly
+      await bot.sendPhoto(chatId, apiUrl, {
+        caption: `🇺🇸 *American Flag 3D Logo for:* ${flagText}\n\n👑 *𝚀𝚞ｅｅｎ 𝚁𝚞ｖ𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      });
+    } else {
+      // If it's not an image, assume it's JSON and handle accordingly (or throw error)
+      try {
+          const data = await response.json();
+          if (data && data.image) {
+              await bot.sendPhoto(chatId, data.image, {
+                  caption: `🇺🇸 *American Flag 3D Logo for:* ${flagText}\n\n👑 *𝚀𝚞ｅｅｎ 𝚁𝚞ｖ𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+                  parse_mode: "Markdown"
+              });
+          } else {
+              throw new Error("Invalid JSON response: no image field found");
+          }
+      } catch (jsonError) {
+          console.error("Failed to parse JSON or no image in JSON:", jsonError);
+          throw new Error("Failed to parse JSON response from API");
+      }
+    }
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Flag command error:", error);
+    await bot.sendMessage(chatId, `⚠️ Failed to generate American Flag 3D logo. Please try again later.\n${error.message}`);
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+case "space": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+
+  if (args.length < 2) {
+    return bot.sendMessage(
+      chatId,
+      "🌌 *Space 3D Logo Generator* 🌌\n\n" +
+      "Usage: /space <text1> <text2>\n" +
+      "Example: /space Queen ruva ai beta \n\n" +
+      "👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  const text1 = encodeURIComponent(args[0]);
+  const text2 = encodeURIComponent(args.slice(1).join(" "));
+
+  let loadingMsg;
+  try {
+    loadingMsg = await bot.sendMessage(chatId, "⏳ Generating Space 3D logo...", { parse_mode: "Markdown" });
+
+    const apiKey = "63b406007be3e32b53";
+    const apiUrl = `https://api.nexoracle.com/ephoto360/space-3d?apikey=${apiKey}&text1=${text1}&text2=${text2}`;
+
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+
+    // Check content type to handle direct image responses
+    const contentType = response.headers.get('content-type');
+
+    if (contentType && contentType.startsWith('image/')) {
+      // It's an image, send it directly
+      await bot.sendPhoto(chatId, apiUrl, {
+        caption: `🌌 *Space 3D Logo for:* ${args[0]} ${args.slice(1).join(" ")}\n\n👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      });
+    } else {
+      // If it's not an image, assume it's JSON and handle accordingly (or throw error)
+      try {
+          const data = await response.json();
+          if (data && data.image) {
+              await bot.sendPhoto(chatId, data.image, {
+                  caption: `🌌 *Space 3D Logo for:* ${args[0]} ${args.slice(1).join(" ")}\n\n👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+                  parse_mode: "Markdown"
+              });
+          } else {
+              throw new Error("Invalid JSON response: no image field found");
+          }
+      } catch (jsonError) {
+          console.error("Failed to parse JSON or no image in JSON:", jsonError);
+          throw new Error("Failed to parse JSON response from API");
+      }
+    }
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Space command error:", error);
+    await bot.sendMessage(chatId, `⚠️ Failed to generate Space 3D logo. Please try again later.\n${error.message}`);
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+
+case "scifi": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+
+  if (args.length < 3) {
+    return bot.sendMessage(
+      chatId,
+      "🚀 *Sci-Fi Logo Generator* 🚀\n\n" +
+      "Usage: /scifi <text1> <text2> <text3>\n" +
+      "Example: /scifi Queen ruva ai beta  Dev\n\n" +
+      "👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  const text1 = encodeURIComponent(args[0]);
+  const text2 = encodeURIComponent(args[1]);
+  const text3 = encodeURIComponent(args.slice(2).join(" "));
+
+  let loadingMsg;
+  try {
+    loadingMsg = await bot.sendMessage(chatId, "⏳ Generating Sci-Fi logo...", { parse_mode: "Markdown" });
+
+    const apiKey = "63b406007be3e32b53";
+    const apiUrl = `https://api.nexoracle.com/ephoto360/sci-fi-logo?apikey=${apiKey}&text1=${text1}&text2=${text2}&text3=${text3}`;
+
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+
+    // Check content type to handle direct image responses
+    const contentType = response.headers.get('content-type');
+
+    if (contentType && contentType.startsWith('image/')) {
+      // It's an image, send it directly
+      await bot.sendPhoto(chatId, apiUrl, {
+        caption: `🚀 *Sci-Fi Logo for:* ${args[0]} ${args[1]} ${args.slice(2).join(" ")}\n\n👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      });
+    } else {
+      // If it's not an image, assume it's JSON and handle accordingly (or throw error)
+      try {
+          const data = await response.json();
+          if (data && data.image) {
+              await bot.sendPhoto(chatId, data.image, {
+                  caption: `🚀 *Sci-Fi Logo for:* ${args[0]} ${args[1]} ${args.slice(2).join(" ")}\n\n👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+                  parse_mode: "Markdown"
+              });
+          } else {
+              throw new Error("Invalid JSON response: no image field found");
+          }
+      } catch (jsonError) {
+          console.error("Failed to parse JSON or no image in JSON:", jsonError);
+          throw new Error("Failed to parse JSON response from API");
+      }
+    }
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Scifi command error:", error);
+    await bot.sendMessage(chatId, `⚠️ Failed to generate Sci-Fi logo. Please try again later.\n${error.message}`);
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+
+case "naruto": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const narutoText = args.join(" ").trim();
+
+  if (!narutoText) {
+    return bot.sendMessage(
+      chatId,
+      "🍥 *Naruto Logo Generator* 🍥\n\n" +
+      "Usage: /naruto <text>\n" +
+      "Example: /naruto Queen ruva ai beta \n\n" +
+      "👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  try {
+    loadingMsg = await bot.sendMessage(chatId, "⏳ Generating Naruto logo...", { parse_mode: "Markdown" });
+
+    const apiKey = "63b406007be3e32b53";
+    const encodedText = encodeURIComponent(narutoText);
+    const apiUrl = `https://api.nexoracle.com/ephoto360/naruto?apikey=${apiKey}&text=${encodedText}`;
+
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+
+    // Check content type to handle direct image responses
+    const contentType = response.headers.get('content-type');
+
+    if (contentType && contentType.startsWith('image/')) {
+      // It's an image, send it directly
+      await bot.sendPhoto(chatId, apiUrl, {
+        caption: `🍥 *Naruto Logo for:* ${narutoText}\n\n👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      });
+    } else {
+      // If it's not an image, assume it's JSON and handle accordingly (or throw error)
+      try {
+          const data = await response.json();
+          if (data && data.image) {
+              await bot.sendPhoto(chatId, data.image, {
+                  caption: `🍥 *Naruto Logo for:* ${narutoText}\n\n👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+                  parse_mode: "Markdown"
+              });
+          } else {
+              throw new Error("Invalid JSON response: no image field found");
+          }
+      } catch (jsonError) {
+          console.error("Failed to parse JSON or no image in JSON:", jsonError);
+          throw new Error("Failed to parse JSON response from API");
+      }
+    }
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Naruto command error:", error);
+    await bot.sendMessage(chatId, `⚠️ Failed to generate Naruto logo. Please try again later.\n${error.message}`);
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+
+case "deadpool": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+
+  if (args.length < 2) {
+    return bot.sendMessage(
+      chatId,
+      "⚔️ *Deadpool Logo Generator* ⚔️\n\n" +
+      "Usage: /deadpool <text1> <text2>\n" +
+      "Example: /deadpool Queen ruva ai beta \n\n" +
+      "👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  const text1 = encodeURIComponent(args[0]);
+  const text2 = encodeURIComponent(args.slice(1).join(" "));
+
+  let loadingMsg;
+  try {
+    loadingMsg = await bot.sendMessage(chatId, "⏳ Generating Deadpool logo...", { parse_mode: "Markdown" });
+
+    const apiKey = "63b406007be3e32b53";
+    const apiUrl = `https://api.nexoracle.com/ephoto360/deadpool?apikey=${apiKey}&text1=${text1}&text2=${text2}`;
+
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+
+    // Check content type to handle direct image responses
+    const contentType = response.headers.get('content-type');
+
+    if (contentType && contentType.startsWith('image/')) {
+      // It's an image, send it directly
+      await bot.sendPhoto(chatId, apiUrl, {
+        caption: `⚔️ *Deadpool Logo for:* ${args[0]} ${args.slice(1).join(" ")}\n\n👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      });
+    } else {
+      // If it's not an image, assume it's JSON and handle accordingly (or throw error)
+      try {
+          const data = await response.json();
+          if (data && data.image) {
+              await bot.sendPhoto(chatId, data.image, {
+                  caption: `⚔️ *Deadpool Logo for:* ${args[0]} ${args.slice(1).join(" ")}\n\n👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+                  parse_mode: "Markdown"
+              });
+          } else {
+              throw new Error("Invalid JSON response: no image field found");
+          }
+      } catch (jsonError) {
+          console.error("Failed to parse JSON or no image in JSON:", jsonError);
+          throw new Error("Failed to parse JSON response from API");
+      }
+    }
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Deadpool command error:", error);
+    await bot.sendMessage(chatId, `⚠️ Failed to generate Deadpool logo. Please try again later.\n${error.message}`);
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+
+case "cubic": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const cubicText = args.join(" ").trim();
+
+  if (!cubicText) {
+    return bot.sendMessage(
+      chatId,
+      "🧊 *Cubic 3D Logo Generator* 🧊\n\n" +
+      "Usage: /cubic <text>\n" +
+      "Example: /cubic Queen ruva ai beta \n\n" +
+      "👑 ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  try {
+    loadingMsg = await bot.sendMessage(chatId, "⏳ Generating Cubic 3D logo...", { parse_mode: "Markdown" });
+
+    const apiKey = "63b406007be3e32b53";
+    const encodedText = encodeURIComponent(cubicText);
+    const apiUrl = `https://api.nexoracle.com/ephoto360/cubic-3d?apikey=${apiKey}&text=${encodedText}`;
+
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+
+    // Check content type to handle direct image responses
+    const contentType = response.headers.get('content-type');
+
+    if (contentType && contentType.startsWith('image/')) {
+      // It's an image, send it directly
+      await bot.sendPhoto(chatId, apiUrl, {
+        caption: `🧊 *Cubic 3D Logo for:* ${cubicText}\n\n👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      });
+    } else {
+      // If it's not an image, assume it's JSON and handle accordingly (or throw error)
+      try {
+          const data = await response.json();
+          if (data && data.image) {
+              await bot.sendPhoto(chatId, data.image, {
+                  caption: `🧊 *Cubic 3D Logo for:* ${cubicText}\n\n👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+                  parse_mode: "Markdown"
+              });
+          } else {
+              throw new Error("Invalid JSON response: no image field found");
+          }
+      } catch (jsonError) {
+          console.error("Failed to parse JSON or no image in JSON:", jsonError);
+          throw new Error("Failed to parse JSON response from API");
+      }
+    }
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Cubic command error:", error);
+    await bot.sendMessage(chatId, `⚠️ Failed to generate Cubic 3D logo. Please try again later.\n${error.message}`);
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+
+case "graffiti": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const graffitiText = args.join(" ").trim();
+
+  if (!graffitiText) {
+    return bot.sendMessage(
+      chatId,
+      "🎨 *Cartoon Style Graffiti Logo Generator* 🎨\n\n" +
+      "Usage: /graffiti <text>\n" +
+      "Example: /graffiti Queen ruva ai beta \n\n" +
+      "👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  try {
+    loadingMsg = await bot.sendMessage(chatId, "⏳ Generating Cartoon Style Graffiti logo...", { parse_mode: "Markdown" });
+
+    const apiKey = "63b406007be3e32b53";
+    const encodedText = encodeURIComponent(graffitiText);
+    const apiUrl = `https://api.nexoracle.com/ephoto360/cartoon-style-graffiti?apikey=${apiKey}&text=${encodedText}`;
+
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+
+    // Check content type to handle direct image responses
+    const contentType = response.headers.get('content-type');
+
+    if (contentType && contentType.startsWith('image/')) {
+      // It's an image, send it directly
+      await bot.sendPhoto(chatId, apiUrl, {
+        caption: `🎨 *Cartoon Style Graffiti Logo for:* ${graffitiText}\n\n👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      });
+    } else {
+      // If it's not an image, assume it's JSON and handle accordingly (or throw error)
+      try {
+          const data = await response.json();
+          if (data && data.image) {
+              await bot.sendPhoto(chatId, data.image, {
+                  caption: `🎨 *Cartoon Style Graffiti Logo for:* ${graffitiText}\n\n👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+                  parse_mode: "Markdown"
+              });
+          } else {
+              throw new Error("Invalid JSON response: no image field found");
+          }
+      } catch (jsonError) {
+          console.error("Failed to parse JSON or no image in JSON:", jsonError);
+          throw new Error("Failed to parse JSON response from API");
+      }
+    }
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Graffiti command error:", error);
+    await bot.sendMessage(chatId, `⚠️ Failed to generate Cartoon Style Graffiti logo. Please try again later.\n${error.message}`);
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+
+case "beach": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const beachText = args.join(" ").trim();
+
+  if (!beachText) {
+    return bot.sendMessage(
+      chatId,
+      "🏖️ *Beach Text 3D Logo Generator* 🏖️\n\n" +
+      "Usage: /beach <text>\n" +
+      "Example: /beach Queen ruva ai beta \n\n" +
+      "👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  try {
+    loadingMsg = await bot.sendMessage(chatId, "⏳ Generating Beach Text 3D logo...", { parse_mode: "Markdown" });
+
+    const apiKey = "63b406007be3e32b53";
+    const encodedText = encodeURIComponent(beachText);
+    const apiUrl = `https://api.nexoracle.com/ephoto360/beach-text-3d?apikey=${apiKey}&text=${encodedText}`;
+
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+
+    // Check content type to handle direct image responses
+    const contentType = response.headers.get('content-type');
+
+    if (contentType && contentType.startsWith('image/')) {
+      // It's an image, send it directly
+      await bot.sendPhoto(chatId, apiUrl, {
+        caption: `🏖️ *Beach Text 3D Logo for:* ${beachText}\n\n👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      });
+    } else {
+      // If it's not an image, assume it's JSON and handle accordingly (or throw error)
+      try {
+          const data = await response.json();
+          if (data && data.image) {
+              await bot.sendPhoto(chatId, data.image, {
+                  caption: `🏖️ *Beach Text 3D Logo for:* ${beachText}\n\n👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+                  parse_mode: "Markdown"
+              });
+          } else {
+              throw new Error("Invalid JSON response: no image field found");
+          }
+      } catch (jsonError) {
+          console.error("Failed to parse JSON or no image in JSON:", jsonError);
+          throw new Error("Failed to parse JSON response from API");
+      }
+    }
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Beach command error:", error);
+    await bot.sendMessage(chatId, `⚠️ Failed to generate Beach Text 3D logo. Please try again later.\n${error.message}`);
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+
+case "hacker": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const hackerText = args.join(" ").trim();
+
+  if (!hackerText) {
+    return bot.sendMessage(
+      chatId,
+      "💀 *Annonymous Hacker Logo Generator* 💀\n\n" +
+      "Usage: /hacker <text>\n" +
+      "Example: /hacker Queen ruva ai beta \n\n" +
+      "👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  try {
+    loadingMsg = await bot.sendMessage(chatId, "⏳ Generating Annonymous Hacker logo...", { parse_mode: "Markdown" });
+
+    const apiKey = "63b406007be3e32b53";
+    const encodedText = encodeURIComponent(hackerText);
+    const apiUrl = `https://api.nexoracle.com/ephoto360/annonymous-hacker?apikey=${apiKey}&text=${encodedText}`;
+
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+
+    // Check content type to handle direct image responses
+    const contentType = response.headers.get('content-type');
+
+    if (contentType && contentType.startsWith('image/')) {
+      // It's an image, send it directly
+      await bot.sendPhoto(chatId, apiUrl, {
+        caption: `💀 *Annonymous Hacker Logo for:* ${hackerText}\n\n👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      });
+    } else {
+      // If it's not an image, assume it's JSON and handle accordingly (or throw error)
+      try {
+          const data = await response.json();
+          if (data && data.image) {
+              await bot.sendPhoto(chatId, data.image, {
+                  caption: `💀 *Annonymous Hacker Logo for:* ${hackerText}\n\n👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+                  parse_mode: "Markdown"
+              });
+          } else {
+              throw new Error("Invalid JSON response: no image field found");
+          }
+      } catch (jsonError) {
+          console.error("Failed to parse JSON or no image in JSON:", jsonError);
+          throw new Error("Failed to parse JSON response from API");
+      }
+    }
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Hacker command error:", error);
+    await bot.sendMessage(chatId, `⚠️ Failed to generate Annonymous Hacker logo. Please try again later.\n${error.message}`);
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+
+case "wings2": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const wingsText = args.join(" ").trim();
+
+  if (!wingsText) {
+    return bot.sendMessage(
+      chatId,
+      "✨ *Angel Wings 2 Logo Generator* ✨\n\n" +
+      "Usage: /wings2 <text>\n" +
+      "Example: /wings2 Queen ruva ai beta \n\n" +
+      "👑 *𝚀𝚞ｅｅｎ 𝚁𝚞ｖ𝚊 𝙰𝚒 𝙱𝚊ｔａ*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  try {
+    loadingMsg = await bot.sendMessage(chatId, "⏳ Generating Angel Wings 2 logo...", { parse_mode: "Markdown" });
+
+    const apiKey = "63b406007be3e32b53";
+    const encodedText = encodeURIComponent(wingsText);
+    const apiUrl = `https://api.nexoracle.com/ephoto360/angel-wings2?apikey=${apiKey}&text=${encodedText}`;
+
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+
+    // Check content type to handle direct image responses
+    const contentType = response.headers.get('content-type');
+
+    if (contentType && contentType.startsWith('image/')) {
+      // It's an image, send it directly
+      await bot.sendPhoto(chatId, apiUrl, {
+        caption: `✨ *Angel Wings 2 Logo for:* ${wingsText}\n\n👑 *𝚀𝚞ｅｅｎ 𝚁𝚞ｖ𝚊 𝙰𝚒 𝙱ａｔａ*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      });
+    } else {
+      // If it's not an image, assume it's JSON and handle accordingly (or throw error)
+      try {
+          const data = await response.json();
+          if (data && data.image) {
+              await bot.sendPhoto(chatId, data.image, {
+                  caption: `✨ *Angel Wings 2 Logo for:* ${wingsText}\n\n👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+                  parse_mode: "Markdown"
+              });
+          } else {
+              throw new Error("Invalid JSON response: no image field found");
+          }
+      } catch (jsonError) {
+          console.error("Failed to parse JSON or no image in JSON:", jsonError);
+          throw new Error("Failed to parse JSON response from API");
+      }
+    }
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Wings2 command error:", error);
+    await bot.sendMessage(chatId, `⚠️ Failed to generate Angel Wings 2 logo. Please try again later.\n${error.message}`);
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+
+case "wings": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const wingsText = args.join(" ").trim();
+
+  if (!wingsText) {
+    return bot.sendMessage(
+      chatId,
+      "🕊️ *Angel Wings Logo Generator* 🕊️\n\n" +
+      "Usage: /wings <text>\n" +
+      "Example: /wings Queen ruva ai beta \n\n" +
+      "👑 *𝚀𝚞ｅｅｎ 𝚁𝚞ｖ𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  try {
+    loadingMsg = await bot.sendMessage(chatId, "⏳ Generating Angel Wings logo...", { parse_mode: "Markdown" });
+
+    const apiKey = "63b406007be3e32b53";
+    const encodedText = encodeURIComponent(wingsText);
+    const apiUrl = `https://api.nexoracle.com/ephoto360/angel-wings?apikey=${apiKey}&text=${encodedText}`;
+
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+
+    // Check content type to handle direct image responses
+    const contentType = response.headers.get('content-type');
+
+    if (contentType && contentType.startsWith('image/')) {
+      // It's an image, send it directly
+      await bot.sendPhoto(chatId, apiUrl, {
+        caption: `🕊️ *Angel Wings Logo for:* ${wingsText}\n\n👑 *𝚀𝚞ｅｅｎ 𝚁𝚞ｖ𝚊 𝙰𝚒 𝙱𝚊ｔ𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      });
+    } else {
+      // If it's not an image, assume it's JSON and handle accordingly (or throw error)
+      try {
+          const data = await response.json();
+          if (data && data.image) {
+              await bot.sendPhoto(chatId, data.image, {
+                  caption: `🕊️ *Angel Wings Logo for:* ${wingsText}\n\n👑 *𝚀𝚞ｅｅｎ 𝚁𝚞ｖ𝚊 𝙰𝚒 𝙱𝚊ｔａ*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+                  parse_mode: "Markdown"
+              });
+          } else {
+              throw new Error("Invalid JSON response: no image field found");
+          }
+      } catch (jsonError) {
+          console.error("Failed to parse JSON or no image in JSON:", jsonError);
+          throw new Error("Failed to parse JSON response from API");
+      }
+    }
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Wings command error:", error);
+    await bot.sendMessage(chatId, `⚠️ Failed to generate Angel Wings logo. Please try again later.\n${error.message}`);
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+
+case "avengers": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+
+  if (args.length < 2) {
+    return bot.sendMessage(
+      chatId,
+      "🛡️ *Avengers Logo Generator* 🛡️\n\n" +
+      "Usage: /avengers <text1> <text2>\n" +
+      "Example: /avengers Queen ruva ai beta \n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  const text1 = encodeURIComponent(args[0]);
+  const text2 = encodeURIComponent(args.slice(1).join(" "));
+
+  let loadingMsg;
+  try {
+    loadingMsg = await bot.sendMessage(chatId, "⏳ Creating your Avengers logo...", { parse_mode: "Markdown" });
+
+    const apiKey = "63b406007be3e32b53";
+    const apiUrl = `https://api.nexoracle.com/ephoto360/avengers?apikey=${apiKey}&text1=${text1}&text2=${text2}`;
+
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+
+    // Check if the response is JSON or an image
+    const contentType = response.headers.get('content-type');
+
+    if (contentType && contentType.includes('application/json')) {
+      // Parse JSON response
+      const data = await response.json();
+      if (!data || !data.image) throw new Error("No image URL found in JSON response");
+
+      await bot.sendPhoto(chatId, data.image, {
+        caption: `🛡️ *Avengers Logo*\n\n*Text1:* ${args[0]}\n*Text2:* ${args.slice(1).join(" ")}\n\n👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      });
+    } else if (contentType && contentType.startsWith('image/')) {
+      // Directly use the image
+      await bot.sendPhoto(chatId, apiUrl, { // Use the API URL directly as the image
+        caption: `🛡️ *Avengers Logo*\n\n*Text1:* ${args[0]}\n*Text2:* ${args.slice(1).join(" ")}\n\n👑 *𝚀𝚞𝚎ｅｎ 𝚁𝚞ｖ𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown"
+      });
+    } else {
+      // Unknown response type
+      throw new Error(`Unexpected content type: ${contentType}`);
+    }
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Avengers command error:", error);
+    await bot.sendMessage(chatId, "⚠️ Failed to generate Avengers logo. Please try again later.\n" + error.message);
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+
+case "mistral": {
+  const chatId = msg.chat.id;
+  const userMessage = msg.text.split(' ').slice(1).join(' ');
+
+  if (!userMessage) {
+    await bot.sendMessage(
+      chatId,
+      "❌ Please enter your message after `/mistral`.\nExample: `/mistral Hello, how are you?`",
+      { parse_mode: "Markdown" }
+    );
+    break;
+  }
+
+  try {
+    const loadingMsg = await bot.sendMessage(
+      chatId,
+      "🌀 Processing your request with MistralNemo...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedQuery = encodeURIComponent(userMessage);
+    const response = await fetch(
+      `https://api.agungny.my.id/api/mistralnemo?q=${encodedQuery}`
+    );
+    const data = await response.json();
+
+    // Extract response
+    let aiReply = data.response || data.result || "I couldn't generate a response.";
+    
+    await bot.sendMessage(
+      chatId,
+      `${aiReply}\n\n🌪️ *MistralNemo AI*\n⚡ Powered by Iconic Tech`,
+      {
+        parse_mode: "Markdown",
+        reply_to_message_id: msg.message_id,
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Mistral command error:", error);
+    await bot.sendMessage(
+      chatId,
+      "⚠️ An error occurred while processing your request with MistralNemo."
+    );
+  }
+  break;
+}
+case "mistral-large": {
+  const chatId = msg.chat.id;
+  const userMessage = msg.text.split(' ').slice(1).join(' ');
+
+  if (!userMessage) {
+    await bot.sendMessage(
+      chatId,
+      "❌ Please enter your message after `/mistral-large`.\nExample: `/mistral-large Explain quantum computing`",
+      { parse_mode: "Markdown" }
+    );
+    break;
+  }
+
+  try {
+    const loadingMsg = await bot.sendMessage(
+      chatId,
+      "🌌 Processing with Mistral-Large...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedQuery = encodeURIComponent(userMessage);
+    const response = await fetch(
+      `https://api.agungny.my.id/api/mistral-large?q=${encodedQuery}`
+    );
+    
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    
+    const data = await response.json();
+
+    // Extract response - adjust based on actual API response structure
+    let aiReply = data.response || data.result || data.message || 
+                 "I couldn't generate a response at this time.";
+
+    await bot.sendMessage(
+      chatId,
+      `${aiReply}\n\n🚀 *Mistral-Large AI*\n⚡ Powered by Iconic Tech`,
+      {
+        parse_mode: "Markdown",
+        reply_to_message_id: msg.message_id,
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Mistral-Large command error:", error);
+    await bot.sendMessage(
+      chatId,
+      "⚠️ Failed to get response from Mistral-Large. Please try again later."
+    );
+    // Optionally keep the loading message for error context
+    // await bot.editMessageText("❌ Request failed", {
+    //   chat_id: chatId,
+    //   message_id: loadingMsg.message_id
+    // });
+  }
+  break;
+}
+case "pixtral": {
+  const chatId = msg.chat.id;
+  const userMessage = msg.text.split(' ').slice(1).join(' ');
+
+  if (!userMessage) {
+    await bot.sendMessage(
+      chatId,
+      "❌ Please enter your message after `/pixtral`.\nExample: `/pixtral What is the meaning of life?`",
+      { parse_mode: "Markdown" }
+    );
+    break;
+  }
+
+  try {
+    const loadingMsg = await bot.sendMessage(
+      chatId,
+      "🎨 Generating response with Pixtral...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedQuery = encodeURIComponent(userMessage);
+    const response = await fetch(
+      `https://apis.davidcyriltech.my.id/ai/pixtral?text=${encodedQuery}`
+    );
+    
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+
+    // Extract response (adjust based on actual API structure)
+    let aiReply = data.response || data.result || data.answer || 
+                 data.message || "Sorry, I couldn't generate a response.";
+
+    await bot.sendMessage(
+      chatId,
+      `${aiReply}\n\n✨ *Pixtral AI*\n⚡ Powered by David Cyril Tech`,
+      {
+        parse_mode: "Markdown",
+        reply_to_message_id: msg.message_id,
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Pixtral command error:", error);
+    await bot.sendMessage(
+      chatId,
+      "⚠️ Pixtral is currently unavailable. Please try again later."
+    );
+    // Optional: Edit loading message instead of deleting
+    // await bot.editMessageText("❌ Pixtral request failed", {
+    //   chat_id: chatId,
+    //   message_id: loadingMsg.message_id
+    // });
+  }
+  break;
+}
+case "coder": {
+  const chatId = msg.chat.id;
+  const userMessage = msg.text.split(' ').slice(1).join(' ');
+
+  if (!userMessage) {
+    await bot.sendMessage(
+      chatId,
+      "❌ Please enter your coding question after `/qwen2coder`.\nExample: `/coder How to reverse a string in Python?`",
+      { parse_mode: "Markdown" }
+    );
+    break;
+  }
+
+  try {
+    const loadingMsg = await bot.sendMessage(
+      chatId,
+      "💻 Generating coding solution...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedQuery = encodeURIComponent(userMessage);
+    const response = await fetch(
+      `https://apis.davidcyriltech.my.id/ai/qwen2Coder?text=${encodedQuery}`
+    );
+    
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+
+    // Extract response - adjust based on actual API response structure
+    let codeResponse = data.response || data.answer || data.message || 
+                      data.result || "Sorry, I couldn't generate a coding solution.";
+
+    // Format code blocks if they exist in response
+    if (containsCode(codeResponse)) {
+      codeResponse = formatCodeBlocks(codeResponse);
+    }
+
+    await bot.sendMessage(
+      chatId,
+      `${codeResponse}\n\n👨‍💻 *Qwen2 Coder*\n⚡ Powered by David Cyril Tech`,
+      {
+        parse_mode: "MarkdownV2",
+        reply_to_message_id: msg.message_id,
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Qwen2Coder command error:", error);
+    await bot.sendMessage(
+      chatId,
+      "⚠️ Failed to get coding solution. The code assistant might be unavailable."
+    );
+  }
+  break;
+}
+case "uncensor": {
+  const chatId = msg.chat.id;
+  const userMessage = msg.text.split(' ').slice(1).join(' ');
+
+  if (!userMessage) {
+    await bot.sendMessage(
+      chatId,
+      "❌ Please enter your message after `/uncensor`.\nExample: `/uncensor Tell me a controversial opinion`",
+      { parse_mode: "Markdown" }
+    );
+    break;
+  }
+
+  try {
+    const loadingMsg = await bot.sendMessage(
+      chatId,
+      "🔥 Generating uncensored response...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedQuery = encodeURIComponent(userMessage);
+    const response = await fetch(
+      `https://apis.davidcyriltech.my.id/ai/uncensor?text=${encodedQuery}`
+    );
+    
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+
+    // Extract response - adjust based on actual API response structure
+    let aiReply = data.response || data.answer || data.message || 
+                 data.result || "I couldn't generate an uncensored response.";
+
+    await bot.sendMessage(
+      chatId,
+      `${aiReply}\n\n🚫 *Uncensored AI*\n⚠️ Responses may be unfiltered`,
+      {
+        parse_mode: "Markdown",
+        reply_to_message_id: msg.message_id,
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Uncensor command error:", error);
+    await bot.sendMessage(
+      chatId,
+      "⚠️ The uncensored AI is currently unavailable. Please try again later."
+    );
+  }
+  break;
+}
+case "queen": {
+  const chatId = msg.chat.id;
+  const userMessage = msg.text.split(' ').slice(1).join(' ');
+
+  if (!userMessage) {
+    await bot.sendMessage(
+      chatId,
+      "❌ Please ask your question after `/queen`.\nExample: `/queen What is AI?`",
+      { parse_mode: "Markdown" }
+    );
+    break;
+  }
+
+  try {
+    const loadingMsg = await bot.sendMessage(
+      chatId,
+      "🤖 Processing your question...",
+      { parse_mode: "Markdown" }
+    );
+
+    const encodedQuery = encodeURIComponent(
+      `Respond in English only: ${userMessage}` // Force English response
+    );
+    const response = await fetch(
+      `https://api.agungny.my.id/api/aiLogic?q=${encodedQuery}`
+    );
+    const data = await response.json();
+
+    // Extract response and enforce English
+    let aiReply = data.response || data.result || "I couldn't generate a response.";
+    aiReply = ensureEnglish(aiReply); // Additional filtering (see helper function below)
+
+    await bot.sendMessage(
+      chatId,
+      `${aiReply}\n\n👑 *Queen Ruva AI*\n⚡ Powered by Iconic Tech`,
+      {
+        parse_mode: "Markdown",
+        reply_to_message_id: msg.message_id,
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Command error:", error);
+    await bot.sendMessage(
+      chatId,
+      "⚠️ An error occurred. Please try again later."
+    );
+  }
+  break;
+}
+
+// Helper function to enforce English (basic example)
+function ensureEnglish(text) {
+  // Replace non-English characters/words if needed
+  return text.replace(/[^\x00-\x7F]/g, '').trim() || "Sorry, I can only respond in English.";
 }
 //. NEW TAG
 case "panda": {
@@ -3282,6 +6736,102 @@ case "elephant": {
   } catch (error) {
     console.error("Elephant command error:", error);
     await bot.sendMessage(chatId, "⚠️ Couldn't fetch an elephant picture. Try again later.");
+  }
+  break;
+}
+case "spellcheck": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const textToCheck = args.join(" ").trim();
+
+  if (!textToCheck) {
+    return bot.sendMessage(
+      chatId,
+      "🧐 *Spelling Checker* 🧐\n\n" +
+      "Usage: /spellcheck <text>\n" +
+      "Example: /spellcheck iam iconic tech\n\n" +
+      "👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  try {
+    loadingMsg = await bot.sendMessage(chatId, "⏳ Checking spelling...", { parse_mode: "Markdown" });
+
+    const apiKey = "63b406007be3e32b53";
+    const encodedText = encodeURIComponent(textToCheck);
+    const apiUrl = `https://api.nexoracle.com/check/spelling?apikey=${apiKey}&q=${encodedText}`;
+
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+
+    const data = await response.json();
+
+    if (data && data.result) {
+      await bot.sendMessage(
+        chatId,
+        `🧐 *Spelling Check Result:* 🧐\n\n${data.result}\n\n👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        { parse_mode: "Markdown" }
+      );
+    } else {
+      throw new Error("Invalid JSON response: no result field found");
+    }
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Spellcheck command error:", error);
+    await bot.sendMessage(chatId, `⚠️ Failed to check spelling. Please try again later.\n${error.message}`);
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+case "checkname": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const nameToCheck = args.join(" ").trim();
+
+  if (!nameToCheck) {
+    return bot.sendMessage(
+      chatId,
+      "👤 *Name Checker* 👤\n\n" +
+      "Usage: /checkname <name>\n" +
+      "Example: /checkname iconic tech\n\n" +
+      "👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  try {
+    loadingMsg = await bot.sendMessage(chatId, "⏳ Checking name...", { parse_mode: "Markdown" });
+
+    const apiKey = "63b406007be3e32b53";
+    const encodedName = encodeURIComponent(nameToCheck);
+    const apiUrl = `https://api.nexoracle.com/check/name?apikey=${apiKey}&name=${encodedName}`;
+
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+
+    const data = await response.json();
+
+    if (data && data.result) {
+      await bot.sendMessage(
+        chatId,
+        `👤 *Name Check Result:* 👤\n\n${data.result}\n\n👑 *ǫᴜᴇᴇɴ ʀᴜᴠᴀ ᴀɪ ʙᴇᴛᴀ*\n⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        { parse_mode: "Markdown" }
+      );
+    } else {
+      throw new Error("Invalid JSON response: no result field found");
+    }
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error("Checkname command error:", error);
+    await bot.sendMessage(chatId, `⚠️ Failed to check name. Please try again later.\n${error.message}`);
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
   }
   break;
 }
@@ -3477,6 +7027,7 @@ case "sadcat": {
   }
   break;
 }
+
 case "oogway": {
   const chatId = msg.chat.id;
   const args = msg.text.split(" ").slice(1);
@@ -3703,7 +7254,266 @@ case "wojak": {
   }
   break;
 }
+//5656523266543222466789986412
+case "findgroup": {
+  try {
+    const args = msg.text.split(" ").slice(1);
+    const query = args.join(" ").trim();
 
+    if (!query) {
+      return bot.sendMessage(
+        msg.chat.id,
+        "*Example*: /findgroup programming",
+        { 
+          parse_mode: "Markdown",
+          reply_to_message_id: msg.message_id 
+        }
+      );
+    }
+
+    const response = await fetch(`https://api.agungny.my.id/api/searchgroup?q=${encodeURIComponent(query)}`);
+    
+    if (!response.ok) throw new Error(`API returned ${response.status}`);
+
+    const data = await response.json();
+
+    if (!data.results || data.results.length === 0) {
+      return bot.sendMessage(
+        msg.chat.id,
+        `❌ No groups found for "${query}"`,
+        { reply_to_message_id: msg.message_id }
+      );
+    }
+
+    let reply = `Groups for "${query}":\n\n`;
+    data.results.slice(0, 5).forEach((group, index) => {
+      reply += `${index+1}. ${group.name || 'No name'}\n${group.link}\n\n`;
+    });
+
+    if (data.results.length > 5) {
+      reply += `Showing 5 of ${data.results.length} groups`;
+    }
+
+    await bot.sendMessage(
+      msg.chat.id,
+      reply,
+      {
+        reply_to_message_id: msg.message_id,
+        disable_web_page_preview: true
+      }
+    );
+
+  } catch (error) {
+    console.error("Group search error:", error);
+    bot.sendMessage(
+      msg.chat.id,
+      "❌ Error searching groups",
+      { reply_to_message_id: msg.message_id }
+    );
+  }
+  break;
+}
+// Video command for Telegram
+case "video":
+case "yt": {
+  const chatId = msg.chat.id;
+  const args = msg.text.split(" ").slice(1);
+  const query = args.join(" ").trim();
+
+  if (!query) {
+    return bot.sendMessage(
+      chatId,
+      "🎬 *Video Downloader* 🎬\n\n" +
+      "Usage: /video <search query or YouTube URL>\n" +
+      "Example: /video 295 Sidhu Moose Wala\n\n" +
+      "👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n" +
+      "⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  let loadingMsg;
+  
+  try {
+    loadingMsg = await bot.sendMessage(
+      chatId,
+      "🔍 Searching for videos...",
+      { parse_mode: "Markdown" }
+    );
+
+    // First search for the video using yt-search
+    const yts = require("yt-search");
+    const search = await yts(query);
+    const video = search.videos[0];
+
+    if (!video) {
+      throw new Error(`No results found for: ${query}`);
+    }
+
+    // Display video details
+    const caption = `🎬 *Video Downloader*\n` +
+      `📺 *Title:* ${video.title}\n` +
+      `👀 *Views:* ${video.views}\n` +
+      `⏳ *Duration:* ${video.timestamp}\n` +
+      `🕒 *Uploaded:* ${video.ago}\n` +
+      `🔗 *Url:* ${video.url}\n\n` +
+      `👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n` +
+      `⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`;
+
+    // Send thumbnail first
+    await bot.sendPhoto(chatId, video.thumbnail, {
+      caption: caption,
+      parse_mode: "Markdown"
+    });
+
+    // Now fetch download links from the API
+    const apiKey = "63b406007be3e32b53";
+    const encodedUrl = encodeURIComponent(video.url);
+    const apiUrl = `https://api.nexoracle.com/downloader/yt-play2?apikey=${apiKey}&q=${encodedUrl}`;
+
+    const response = await fetch(apiUrl);
+    if (!response.ok) {
+      throw new Error(`API request failed with status ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    if (data.status !== 200 || !data.result) {
+      throw new Error("Failed to fetch download links");
+    }
+
+    const { title, video: videoUrl, audio: audioUrl } = data.result;
+
+    // Create buttons for download options
+    const buttons = [
+      [
+        {
+          text: "📥 Download Video",
+          url: videoUrl
+        },
+        {
+          text: "🎧 Download Audio",
+          url: audioUrl
+        }
+      ]
+    ];
+
+    // Send the download options
+    await bot.sendMessage(
+      chatId,
+      `📥 *Download Options for:* ${title}\n\n` +
+      `Choose your preferred download format:\n\n` +
+      `👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n` +
+      `⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+      {
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: buttons
+        }
+      }
+    );
+
+    await bot.deleteMessage(chatId, loadingMsg.message_id);
+  } catch (error) {
+    console.error('Video command error:', error);
+    
+    let errorMessage = "⚠️ An error occurred while processing your request.";
+    if (error.message.includes('No results found')) {
+      errorMessage = `🎬 No results found for: ${query}`;
+    } else if (error.message.includes('Failed to fetch download links')) {
+      errorMessage = "⚠️ Failed to get download links. Please try again later.";
+    }
+
+    await bot.sendMessage(chatId, errorMessage);
+    if (loadingMsg) await bot.deleteMessage(chatId, loadingMsg.message_id).catch(console.error);
+  }
+  break;
+}
+case "play": {
+  try {
+    const args = msg.text.split(" ").slice(1); // Get arguments after command
+    const songQuery = args.join(" "); // Combine into search query
+
+    // Check if query is provided
+    if (!songQuery) {
+      return bot.sendMessage(
+        msg.chat.id,
+        `*Example*: /play Soso by Omah Lay\n\n` +
+        `👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 �𝚊𝚒 �𝚊𝚝𝚊*\n` +
+        `⚡ ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        { parse_mode: "Markdown" }
+      );
+    }
+
+    // Notify user processing is starting
+    await bot.sendMessage(msg.chat.id, "🔍 Searching for song... ⏳");
+
+    // Step 1: Search for the song
+    const searchResponse = await fetch(
+      `https://apis.davidcyriltech.my.id/search?query=${encodeURIComponent(songQuery)}`
+    );
+
+    if (!searchResponse.ok) {
+      throw new Error(`Search failed with status ${searchResponse.status}`);
+    }
+
+    const searchData = await searchResponse.json();
+    const video = searchData.videos?.[0];
+
+    if (!video) {
+      throw new Error("No results found for your query");
+    }
+
+    // Send song info
+    await bot.sendPhoto(
+      msg.chat.id,
+      video.thumbnail,
+      {
+        caption: `🎵 *${video.title}*\n\n` +
+                 `⏱ ${video.timestamp || 'N/A'} | 👀 ${video.views || 'N/A'}\n` +
+                 `👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n` +
+                 `⚡ ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
+        parse_mode: "Markdown",
+        reply_to_message_id: msg.message_id
+      }
+    );
+
+    // Step 2: Get audio download
+    const audioResponse = await fetch(
+      `https://apis.davidcyriltech.my.id/download/ytmp3?url=${encodeURIComponent(video.url)}`
+    );
+
+    if (!audioResponse.ok) {
+      throw new Error(`Audio download failed with status ${audioResponse.status}`);
+    }
+
+    const audioData = await audioResponse.json();
+
+    if (!audioData.downloadUrl) {
+      throw new Error("No audio URL found in response");
+    }
+
+    // Send the audio file
+    await bot.sendAudio(
+      msg.chat.id,
+      audioData.downloadUrl,
+      {
+        title: video.title,
+        performer: video.channel || "YouTube",
+        reply_to_message_id: msg.message_id
+      }
+    );
+
+  } catch (error) {
+    console.error("Play command error:", error);
+    await bot.sendMessage(
+      msg.chat.id,
+      `❌ Error: ${error.message}\n\nFailed to play "${songQuery}"`,
+      { reply_to_message_id: msg.message_id }
+    );
+  }
+  break;
+}
 //DONE CODE BY DEEPSEEK 
   case "ai": {
   try {
@@ -4489,115 +8299,7 @@ case "ssweb": {
   });
   break;
 }
-case "pairing": {
-    try {
-        const { chat, from, text } = msg;
-        const chatId = chat.id;
-        
-        // Extract number from command
-        const userNumber = text.split(" ")[1];
-        if (!userNumber) {
-            return bot.sendMessage(
-                chatId,
-                `📱 *WhatsApp Pairing*\n\n` +
-                `Please provide your WhatsApp number:\n` +
-                `\`/pairing 1234567890\`\n\n` +
-                `Example: \`/pairing 15551234567\` (with country code)`,
-                { parse_mode: "Markdown" }
-            );
-        }
 
-        // Validate number
-        const cleanNumber = userNumber.replace(/[^0-9]/g, '');
-        if (cleanNumber.length < 8) {
-            return bot.sendMessage(
-                chatId,
-                "❌ Invalid number format. Include country code (e.g. 14151234567)",
-                { parse_mode: "Markdown" }
-            );
-        }
-
-        // Start pairing process
-        const loadingMsg = await bot.sendMessage(
-            chatId,
-            `⚙️ Generating pairing code for ${cleanNumber}...`,
-            { parse_mode: "Markdown" }
-        );
-
-        // Initialize WhatsApp connection directly
-        const { state, saveCreds } = await useMultiFileAuthState(`./session_${from.id}`);
-        const sock = makeWASocket({
-            auth: {
-                creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, pino()),
-            },
-            printQRInTerminal: false,
-            logger: pino({ level: "silent" })
-        });
-
-        // Request pairing code
-        if (!sock.authState.creds.registered) {
-            const pairingCode = await sock.requestPairingCode(cleanNumber);
-            
-            // Send code to user
-            await bot.editMessageText(
-                `✅ *Pairing Code Generated*\n\n` +
-                `🔢 Code: \`${pairingCode}\`\n\n` +
-                `1. Open WhatsApp → Linked Devices\n` +
-                `2. Tap "Link a Device"\n` +
-                `3. Enter this code`,
-                {
-                    chat_id: chatId,
-                    message_id: loadingMsg.message_id,
-                    parse_mode: "Markdown"
-                }
-            );
-
-            // Listen for connection updates
-            sock.ev.on("connection.update", async (update) => {
-                if (update.connection === "open") {
-                    // Connection successful - send creds.json
-                    const creds = fs.readFileSync(`./session_${from.id}/creds.json`);
-                    
-                    await bot.sendDocument(
-                        chatId,
-                        creds,
-                        {},
-                        {
-                            filename: "creds.json",
-                            contentType: "application/json"
-                        }
-                    );
-                    
-                    await bot.sendMessage(
-                        chatId,
-                        `🔐 *Pairing Complete!*\n\n` +
-                        `Your credentials file has been sent.\n` +
-                        `⚠️ Keep this file secure!`,
-                        { parse_mode: "Markdown" }
-                    );
-
-                    // Cleanup
-                    sock.end();
-                    fs.rmSync(`./session_${from.id}`, { recursive: true });
-                }
-            });
-
-            // Save credentials when updated
-            sock.ev.on("creds.update", saveCreds);
-        }
-
-    } catch (error) {
-        console.error("Pairing error:", error);
-        bot.sendMessage(
-            chatId,
-            `❌ Pairing failed: ${error.message}\n\n` +
-            `Please try again later.`,
-            { parse_mode: "Markdown" }
-        );
-    }
-    break;
-}
 case "mutegroup": {
   // Check if the message is from a group
   if (msg.chat.type !== "group" && msg.chat.type !== "supergroup") {
@@ -5164,91 +8866,56 @@ case "join": {
   }
 }
 break;
-case "anime": {
-  const chatId = msg.chat.id;
-  const args = msg.text.split(" ").slice(1);
-  const userQuery = args.join(" ").trim();
-
-  if (!userQuery) {
-    return bot.sendMessage(
-      chatId,
-      `🎌 *Anime Image Search* 🎌\n\n` +
-      `Usage: /anime <search term>\n` +
-      `Example: /anime naruto\n\n` +
-      `👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n` +
-      `⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
-      { parse_mode: "Markdown" }
-    );
-  }
-
+case "animetts": {
   try {
-    // Show loading animation
-    const loadingMsg = await bot.sendMessage(
-      chatId,
-      `🔍 *Searching Anime Images* 🔍\n\n` +
-      `▰▱▱▱▱▱▱▱▱▱ 20%\n` +
-      `Looking for "${userQuery}"...`,
-      { parse_mode: "Markdown" }
-    );
+    const args = msg.text.split(" ").slice(1);
+    const text = args.join(" ");
 
-    // Fetch images
-    const apiUrl = `https://img.hazex.workers.dev/?prompt=${encodeURIComponent(userQuery)}&anime=true`;
-    const response = await fetch(apiUrl);
+    if (!text) {
+      return bot.sendMessage(msg.chat.id, "*Example*: /animetts Konnichiwa minna-san", { 
+        parse_mode: "Markdown",
+        reply_to_message_id: msg.message_id
+      });
+    }
+
+    if (text.length > 100) {
+      return bot.sendMessage(msg.chat.id, "❌ Text must be under 100 characters!", {
+        reply_to_message_id: msg.message_id
+      });
+    }
+
+    await bot.sendMessage(msg.chat.id, "Generating anime voice... ⏳", {
+      reply_to_message_id: msg.message_id
+    });
+
+    const voiceTypes = ["female1", "female2", "male1"];
+    const voice = voiceTypes[Math.floor(Math.random() * voiceTypes.length)];
     
-    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    const response = await fetch(`https://api.agungny.my.id/api/animetts?q=${encodeURIComponent(text)}&voice=${voice}`);
+    
+    if (!response.ok) throw new Error("API request failed");
+    
+    // Convert the stream to buffer
+    const chunks = [];
+    for await (const chunk of response.body) {
+      chunks.push(chunk);
+    }
+    const audioBuffer = Buffer.concat(chunks);
 
-    // Send all 5 images directly
-    let imagesSent = 0;
-    for (let i = 1; i <= 5; i++) {
-      try {
-        const imageUrl = `${apiUrl}&index=${i}`;
-        await bot.sendPhoto(
-          chatId,
-          imageUrl,
-          {
-            caption: `🖼️ Anime Image ${i} for "${userQuery}"\n\n` +
-                     `👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n` +
-                     `⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
-            parse_mode: "Markdown"
-          }
-        );
-        imagesSent++;
-        // Small delay between images to avoid rate limiting
-        if (i < 5) await new Promise(resolve => setTimeout(resolve, 500));
-      } catch (imageError) {
-        console.error(`Error sending anime image ${i}:`, imageError);
-        // Continue to next image if one fails
+    await bot.sendVoice(
+      msg.chat.id,
+      audioBuffer,
+      {
+        caption: `🎤 Anime TTS: ${text}`,
+        reply_to_message_id: msg.message_id
       }
-    }
-
-    if (imagesSent === 0) {
-      throw new Error('No anime images could be sent');
-    }
-
-    // Final message showing completion
-    await bot.sendMessage(
-      chatId,
-      `✅ Sent ${imagesSent} anime images for "${userQuery}"\n\n` +
-      `👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n` +
-      `⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
-      { parse_mode: "Markdown" }
     );
-
-    await bot.deleteMessage(chatId, loadingMsg.message_id);
 
   } catch (error) {
-    console.error("Anime command error:", error);
-    await bot.sendMessage(
-      chatId,
-      `⚠️ *Anime Search Failed* ⚠️\n\n` +
-      `Couldn't find anime images for "${userQuery}"\n` +
-      `• Try different keywords\n` +
-      `• Check your spelling\n` +
-      `• The service might be temporarily unavailable\n\n` +
-      `👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n` +
-      `⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
-      { parse_mode: "Markdown" }
-    );
+    console.error("AnimeTTS error:", error);
+    bot.sendMessage(msg.chat.id, "❌ Failed to generate anime voice. Try again later.", {
+      reply_to_message_id: msg.message_id
+    });
   }
   break;
 }
@@ -5283,113 +8950,7 @@ break;
   ᴄʀᴇᴀᴛᴏʀ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`);
 }
 break;
-case "message": {
-    try {
-        // Random message generator
-        const randomMessages = [
-            {
-                text: `👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊 Update* 👑\n\n` +
-                      `We've heard your feedback!\n` +
-                      `Our team at *Iconic Tech* is working on:\n` +
-                      `• Enhanced video playback\n` +
-                      `• we updated bot everyday don't forget to typ message to see notification \n` +
-                      `• New fun commands\n\n` +
-                      `Stay tuned for the next upgrade!\n\n` +
-                      `⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
-                options: {
-                    parse_mode: "Markdown",
-                    reply_markup: {
-                        inline_keyboard: [
-                            [{
-                                text: "🔔 Join Updates Channel",
-                                url: "https://t.me/iconictech_official"
-                            }]
-                        ]
-                    }
-                }
-            },
-            {
-                text: `✨ *Thanks for typ message..this messages its for you queen ruva ai user s* ✨\n\n` +
-                      `Thanks for using *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*!\n\n` +
-                      `Recent improvements:\n` +
-                      `• Fixed audio playback issues\n` +
-                      `• Added  new response modes\n` +
-                      `• Optimized bot performance\n\n` +
-                      `⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
-                options: {
-                    parse_mode: "Markdown"
-                }
-            },
-            {
-                text: `🚀 *Coming Soon* 🚀\n\n` +
-                      `*𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊* is getting:\n` +
-                      `• new update its play and video.my team we work on it \n` +
-                      `• don't forget to typ message for what we ADDED on our bot\n` +
-                      `• 25/3/2025*\n\n` +
-                      `Follow for more information\n\n` +
-                      `⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
-                options: {
-                    parse_mode: "Markdown",
-                    reply_markup: {
-                        inline_keyboard: [
-                            [{
-                                text: "💌Join update chatroom",
-                                url: "https://t.me/iconictech_official"
-                            }],
-                            [{
-                                text: "Whatsapp Channel",
-                                url: "https://whatsapp.com/channel/0029ValX2Js9RZAVtDgMYj0r"
-                            }]
-                        ]
-                    }
-                }
-            }
-        ];
 
-        // Select random message
-        const randomIndex = Math.floor(Math.random() * randomMessages.length);
-        const selectedMessage = randomMessages[randomIndex];
-
-        // Send message
-        await bot.sendMessage(
-            chatId,
-            selectedMessage.text,
-            selectedMessage.options
-        );
-
-        // Callback handlers
-        bot.on('callback_query', async (callbackQuery) => {
-            switch(callbackQuery.data) {
-                case "vote_games":
-                    await bot.answerCallbackQuery(callbackQuery.id, {
-                        text: "Thanks for voting for game features!",
-                        show_alert: false
-                    });
-                    break;
-                
-                case "vote_langs":
-                    await bot.answerCallbackQuery(callbackQuery.id, {
-                        text: "Language support coming soon!",
-                        show_alert: false
-                    });
-                    break;
-            }
-        });
-
-    } catch (error) {
-        console.error("Message command error:", error);
-        await bot.sendMessage(
-            chatId,
-            `❌ *Message System Error*\n\n` +
-            `Our royal messengers are busy!\n` +
-            `Try again later...\n\n` +
-            `👑 *𝚀𝚞𝚎𝚎𝚗 𝚁𝚞𝚟𝚊 𝙰𝚒 𝙱𝚊𝚝𝚊*\n` +
-            `⚡  ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ`,
-            { parse_mode: "Markdown" }
-        );
-    }
-    break;
-}
 case "whatsapp": {
   try {
     await bot.sendMessage(
@@ -5758,6 +9319,18 @@ case "chat": {
   break;
 }
 case "restart": {
+    // Owner IDs as numbers
+    const owners = [5028094995, 6662683752]; // Replace with your actual owner IDs
+
+    // Convert chatId to number for reliable comparison
+    const numericChatId = Number(chatId);
+    console.log("Restart command from chatId:", chatId, "numeric:", numericChatId);
+
+    if (!owners.includes(numericChatId)) {
+        await bot.sendMessage(chatId, "🚫 You are not my owner. Access denied.");
+        break;
+    }
+
     // Show typing indicator for 3 seconds
     await bot.sendChatAction(chatId, 'typing');
     await new Promise(resolve => setTimeout(resolve, 3000));
@@ -5791,22 +9364,22 @@ case "restart": {
         }
     );
 
-    // Handle button presses
+    // Handle button presses once
     bot.once("callback_query", async (callbackQuery) => {
-        const chatId = callbackQuery.message.chat.id;
+        const callbackChatId = callbackQuery.message.chat.id;
         const messageId = callbackQuery.message.message_id;
         const data = callbackQuery.data;
 
         try {
             if (data === "instant_restart") {
-                // Countdown from 3
+                // Countdown from 3 seconds
                 for (let i = 3; i > 0; i--) {
                     await bot.editMessageText(
                         `⚡ *INSTANT RESTART INITIATED* ⚡\n` +
                         `⌛ Restarting in ${i} seconds...\n\n` +
                         `_This action cannot be canceled_`,
                         {
-                            chat_id: chatId,
+                            chat_id: callbackChatId,
                             message_id: messageId,
                             parse_mode: "Markdown"
                         }
@@ -5817,8 +9390,8 @@ case "restart": {
                     `🌀 *Queen Ruva AI is restarting...*\n` +
                     `⏳ Please wait 10-15 seconds`,
                     {
-                        chat_id: chatId,
-                        message_id: messageId, 
+                        chat_id: callbackChatId,
+                        message_id: messageId,
                         parse_mode: "Markdown"
                     }
                 );
@@ -5827,31 +9400,31 @@ case "restart": {
             } else if (data === "safe_restart") {
                 const steps = [
                     "🧹 Cleaning temporary files...",
-                    "📦 Saving active sessions...", 
+                    "📦 Saving active sessions...",
                     "🔒 Securing data...",
                     "✅ *All systems ready for restart*"
                 ];
-                
+
                 for (const step of steps) {
                     await bot.editMessageText(
                         `🛡️ *SAFE RESTART SEQUENCE* 🛡️\n` +
                         `${step}\n\n` +
                         `_Please wait..._`,
                         {
-                            chat_id: chatId,
+                            chat_id: callbackChatId,
                             message_id: messageId,
                             parse_mode: "Markdown"
                         }
                     );
                     await new Promise(resolve => setTimeout(resolve, 1500));
                 }
-                
+
                 await bot.editMessageText(
                     `🔄 *SAFE RESTART COMPLETE*\n` +
                     `♻️ Bot will now restart automatically\n\n` +
                     `_Reconnecting in 5 seconds..._`,
                     {
-                        chat_id: chatId,
+                        chat_id: callbackChatId,
                         message_id: messageId,
                         parse_mode: "Markdown"
                     }
@@ -5864,22 +9437,22 @@ case "restart": {
                     `🤖 Queen Ruva AI remains operational\n` +
                     `⏱️ Uptime: ${formatUptime(process.uptime())}`,
                     {
-                        chat_id: chatId,
+                        chat_id: callbackChatId,
                         message_id: messageId,
                         parse_mode: "Markdown"
                     }
                 );
             }
-            
+
             await bot.answerCallbackQuery(callbackQuery.id, {
-                text: `Action: ${data.replace("_", " ").toUpperCase()}`
+                text: `Action: ${data.replace(/_/g, " ").toUpperCase()}`
             });
-            
+
         } catch (error) {
             console.error("Restart error:", error);
         }
     });
-    
+
     break;
 }
 
@@ -5898,29 +9471,23 @@ function formatUptime(seconds) {
 
   const menuText = `
 ╭━━━╔═══◆◇◆◇◆◇◆═══╗  
-     ꧁𝑄𝑈𝐸𝐸𝑁 𝑅𝑈𝑉𝐴 𝐴𝐼 𝐵𝐸𝑇𝐴꧂
+     ≮𝑄𝑈𝐸𝐸𝑁 𝑅𝑈𝑉𝐴 𝐴𝐼 𝐵𝐸𝑇𝐴≯
 ╚═══◆◇◆◇◆◇◆═══╝  
-⫸ ⚡ ᴏᴡɴᴇʀ : ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ 
-⫸ 🔰 ʙᴀɪʟᴇʏs : Multi Device  
-⫸ 💻 ᴛʏᴘᴇ : Node.js  
-⫸ 🌍 ᴘʟᴀᴛғᴏʀᴍ : Termux  
-⫸ 🤖 ᴘʀᴇғɪx : *[/]*  
-⫸ 🚀 ᴠᴇʀsɪᴏɴ : 1.0.0 Beta  
-⫸ ⏳ ᴀʟᴡᴀʏs ᴏɴ : True  
-⫸ 🏅 ᴜsᴇʀ : ${userName}  
-⫸ 📅 ᴅᴀᴛᴇ : ${currentDate}  
+֎︎ ⚡ ᴄʀᴇᴀᴛᴏʀ : ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ
+֎︎ 🌍 ᴘʟᴀᴛғᴏʀᴍ : Termux 
+֎︎ 🚀 ᴠᴇʀsɪᴏɴ : 1.0.3 Beta  
+֎ ︎⏳ ᴀʟᴡᴀʏs ᴏɴ : True  
+֎︎ 🏅 ᴜsᴇʀ : ${userName}  
+֎ 📅 ᴅᴀᴛᴇ : ${currentDate}  
 ═══════════════════≫⃫  
 ╰━━━━━━━━⤲━━━━━━━┈⊷
 
-┏━━━✦ OWNER ✦━━━┓
-┃ ⌬ owner  
-┃ ⌬ contact  
-┗━━━━━━━━━━━━━━┛
-┏━━━✦ USER MENU ✦━━━┓
+┏━━━✦ 𝐔𝐒𝐄𝐑 𝐌𝐄𝐍𝐔 ✦━━━┓
 ┃ ⌬ reverse  
 ┃ ⌬ tempemail  
 ┃ ⌬ date  
 ┃ ⌬ infor  
+┃ ⌬ apk
 ┃ ⌬ information  
 ┃ ⌬ settings  
 ┃ ⌬ help  
@@ -5935,8 +9502,9 @@ function formatUptime(seconds) {
 ┃ ⌬ url  
 ┃ ⌬ hosting  
 ┃ ⌬ about  
+┃ ⌬ ngl
 ┗━━━━━━━━━⤲━━━━━━━━━┛
-┏━━━✦ ANIMAL MENU ✦━━━┓
+┏━━━✦ 𝐀𝐍𝐈𝐌𝐀𝐋 𝐌𝐄𝐍𝐔 ✦━━━┓
 ┃ ⌬ dog  
 ┃ ⌬ cat
 ┃ ⌬ fox
@@ -5952,33 +9520,88 @@ function formatUptime(seconds) {
 ┃ ⌬ Redpanda
 ┃ ⌬ Elephant
 ┗━━━━━━━━━━━━━━━━━━━┛
-┏━━━✦ HISTORY MENU ✦━━┓
+┏━━━✦ 𝐒𝐄𝐀𝐑𝐂𝐇 𝐌𝐄𝐍𝐔 ✦━━┓
+┃ ⌬ Shazam 
+┃ ⌬ lyrics
+┃ ⌬ play
+┃ ⌬ video 
+┗━━━━━━━━━━━━━━━━━━━┛
+┏━━━✦ 𝐇𝐈𝐒𝐓𝐎𝐑𝐘 𝐌𝐄𝐍𝐔 ✦━━┓
 ┃ ⌬ history
 ┗━━━━━━━━━━━━━━━━━━━┛
-┏━━━✦ RELIGION MENU ✦━━┓
+┏━━━✦ 𝐑𝐀𝐍𝐃𝐎𝐌 𝐌𝐄𝐍𝐔 ✦━━┓
+┃ ⌬ catfact
+┃ ⌬ fact
+┃ ⌬ quotes
+┗━━━━━━━━━━━━━━━━━━━┛
+┏━━━✦ 𝐎𝐖𝐍𝐄𝐑 ✦━━━━━━━━┓
+┃ ⌬ owner  
+┃ ⌬ contact  
+┗━━━━━━━━━━━━━━━━━━━┛
+┏━━━✦ 𝐑𝐄𝐋𝐈𝐆𝐈𝐎𝐍 𝐌𝐄𝐍𝐔✦━━┓
 ┃ ⌬ bible 
 ┃ ⌬ quran
 ┃ ⌬ dhammapada
 ┗━━━━━━━━━━━━━━━━━━━┛
-┏━━━✦ MEME MENU ✦━━━┓
+┏━━━✦ CODE MENU ✦━━┓
+┃ ⌬ consensus 
+┃ ⌬ codestral-mamba
+┃ ⌬ codestral
+┗━━━━━━━━━━━━━━━━━━━┛
+┏━━━✦ 𝐌𝐄𝐌𝐄 𝐌𝐄𝐍𝐔 ✦━━━┓
 ┃ ⌬ meme 
 ┃ ⌬ drake 
 ┃ ⌬ oogway 
 ┃ ⌬ clown
 ┃ ⌬ sadcat
 ┗━━━━━━━━━━━━━━━━━━┛
-┏━━━✦ GITHUB MENU ✦━━━┓
+┏━━━✦ 𝐀𝐈 𝐈𝐌𝐆 𝐌𝐄𝐍𝐔 ✦━━━┓
+┃ ⌬ img  
+┃ ⌬ diffusion
+┃ ⌬ anime  
+┃ ⌬ pixabay  
+┃ ⌬ Lepton
+┃ ⌬ reimagine
+┃ ⌬ Text2Image
+┃ ⌬ Poli
+┃ ⌬ fluxwebui
+┃ ⌬ flux 
+┗━━━━━━━━━━━━━━━━━━━┛
+┏━━━✦ 𝐋𝐎𝐆𝐎 𝐌𝐄𝐍𝐔 ✦━━━━┓
+┃ ⌬ glow
+┃ ⌬ logo 
+┃ ⌬ book
+┃ ⌬ write
+┃ ⌬ summer 
+┃ ⌬ carbon 
+┃ ⌬ deletetext
+┃ ⌬ brat
+┃ ⌬ anemebrat
+┃ ⌬ Space
+┃ ⌬ Graffiti
+┃ ⌬ Beach
+┃ ⌬ Hacker 
+┃ ⌬ Wings2
+┃ ⌬ Wings
+┃ ⌬ Cubic 
+┃ ⌬ Scifi 
+┃ ⌬ Wings
+┃ ⌬ flags 
+┃ ⌬ avengers
+┃ ⌬ sertifikat
+┗━━━━━━━━━━━━━━━━━━━┛
+┏━━━✦ 𝐆𝐈𝐓𝐇𝐔𝐁 𝐌𝐄𝐍𝐔 ✦━━━┓
 ┃ ⌬ file  
 ┃ ⌬ repo  
 ┃ ⌬ gitclone  
 ┃ ⌬ searchrepo  
 ┃ ⌬ githubuser  
 ┗━━━━━━━━━━━━━━━━━━━┛
-┏━━━✦ FROM DEV ✦━━━┓
+┏━━━✦ 𝐅𝐑𝐎𝐌 𝐃𝐄𝐕 ✦━━━━━┓
 ┃ ⌬ message  
 ┃ ⌬ chat  
-┗━━━━━━━━━━━━━━━┛
-┏━━━✦ SYSTEM ✦━━━┓
+┗━━━━━━━━━━━━━━━━━━┛
+┏━━━✦ SYSTEM ✦━━━━━━┓
 ┃ ⌬ runtime  
 ┃ ⌬ ping  
 ┃ ⌬ mooddetector  
@@ -5986,8 +9609,8 @@ function formatUptime(seconds) {
 ┃ ⌬ date  
 ┃ ⌬ time  
 ┃ ⌬ autotyping  
-┗━━━━━━━━━━━━━━┛
-┏━━━✦ GAMES ✦━━━┓
+┗━━━━━━━━━━━━━━━━━┛
+┏━━━✦ 𝐆𝐀𝐌𝐄𝐒 ✦━━━━━━┓
 ┃ ⌬ Riddle
 ┃ ⌬ Roast  
 ┃ ⌬ Dadjoke
@@ -5998,8 +9621,8 @@ function formatUptime(seconds) {
 ┃ ⌬ hangman
 ┃ ⌬ 8ball  
 ┃ ⌬ tod
-┗━━━━━━━━━━━━━━┛
-┏━━━✦ GROUP MENU ✦━━━┓
+┗━━━━━━━━━━━━━━━━━━┛
+┏━━━✦ 𝐆𝐑𝐎𝐔𝐏 𝐌𝐄𝐍𝐔 ✦━━┓
 ┃ ⌬ setdesc  
 ┃ ⌬ promote  
 ┃ ⌬ demote  
@@ -6017,21 +9640,20 @@ function formatUptime(seconds) {
 ┃ ⌬ ban  
 ┃ ⌬ groupinfo  
 ┃ ⌬ grouprule  
-┃ ⌬ lyrics  
 ┃ ⌬ sticker  
-┗━━━━━━━━━━━━━━━━━━┛
-┏━━━✦ CHATGPT MENU ✦━━━┓
-┃ ⌬ deepseek  
-┃ ⌬ openai  
-┃ ⌬ llama  
-┃ ⌬ ai  
-┗━━━━━━━━━━━━━━━━━━━━┛
-┏━━━✦ AI IMG MENU ✦━━━┓
-┃ ⌬ img  
-┃ ⌬ anime  
-┃ ⌬ pixabay  
 ┗━━━━━━━━━━━━━━━━━━━┛
-╰━━━〔꧁꧂〕━━━┈⊷
+┏━━━✦ 𝐂𝐇𝐀𝐓𝐆𝐏𝐓 𝐌𝐄𝐍𝐔 ✦━━┓
+┃ ⌬ ai  
+┃ ⌬ queen  
+┃ ⌬ llama  
+┃ ⌬ deepseek  
+┃ ⌬ uncensor
+┃ ⌬ openai
+┃ ⌬ coder
+┃ ⌬ pixtral
+┗━━━━━━━━━━━━━━━━━━━┛
+
+      ━━━〔꧁꧂〕━━━
 ꧁ᴘᴏᴡᴇʀᴇᴅ ʙʏ ɪᴄᴏɴɪᴄ ᴛᴇᴄʜ꧂
   `;
   
@@ -6588,6 +10210,7 @@ case 'quote': {
   break; // Ensure the switch case exits properly
 }
 });
+
 // Health check endpoint
 app.get('/', (req, res) => {
   res.status(200).json({ 
