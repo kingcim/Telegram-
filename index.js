@@ -363,12 +363,6 @@ bot.on("chat_member", async (msg) => {
     await bot.sendMessage(chatId, welcomeMessage, { parse_mode: "Markdown" });
   }
 });
-// ==============================================
-//  QUEEN RUVA AI BETA (by Iconic Tech) 
-// ==============================================
-//  CHATBOT CONTROL SYSTEM (Owner Restricted)
-// ==============================================
-
 let global = {
     chatbot: true // Default enabled
 };
@@ -460,15 +454,14 @@ bot.on('message', async (msg) => {
         // Show "typing" action
         await bot.sendChatAction(msg.chat.id, 'typing');
 
-        // Using the new GiftedTech API
-        const response = await axios.get('https://api.giftedtech.web.id/api/ai/openai', {
+        // Using the new API endpoint
+        const response = await axios.get('https://apis-keith.vercel.app/ai/deepseekV3', {
             params: { 
-                apikey: 'gifted',
                 q: msg.text 
             }
         });
 
-        if (response.data?.success && response.data?.result) {
+        if (response.data?.status && response.data?.result) {
             await bot.sendMessage(
                 msg.chat.id,
                 "╔══════════════════════╗\n" +
@@ -509,15 +502,6 @@ bot.on('message', async (msg) => {
         );
     }
 });
-
-// ==============================================
-//  REST OF YOUR EXISTING BOT CODE (ANTI-LINK, etc.)
-// ==============================================
-// ... [Your existing group management code remains unchanged]
-// Owner-only broadcast command
-// ==============================================
-//  QUEEN RUVA AI BETA (by Iconic Tech) 
-// ==============================================
 //  BROADCAST MESSAGE HANDLER - OWNER COMMAND
 // ==============================================
 bot.onText(/^\/listgroup$/, async (msg) => {
