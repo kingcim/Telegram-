@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: queen-ruva-ai
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: TOKEN
+        fromGroup: telegram-bot
+      - key: NODE_ENV
+        value: production
